@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Job Shop Dashboard</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="view-login" class="view">
+  <form id="login-form" class="login-box">
+    <h1>Job Shop Dashboard</h1>
+    <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
+    <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
+    <button type="submit">Log in</button>
+    <p id="login-error" class="error hidden"></p>
+  </form>
+</section>
+
+<!-- APP SHELL -->
+<div id="app-shell" class="hidden">
+  <nav class="topnav no-print">
+    <div class="nav-left">
+      <button data-view="board" class="nav-btn active">Board</button>
+      <button data-view="customers" class="nav-btn">Customers</button>
+    </div>
+    <div class="nav-right">
+      <button id="btn-new-job" class="nav-btn primary">+ New Job</button>
+      <button id="btn-logout" class="nav-btn">Log out</button>
+    </div>
+  </nav>
+
+  <main id="app-main">
+
+    <!-- BOARD -->
+    <section id="view-board" class="view">
+      <div class="board-controls no-print">
+        <label class="show-lost"><input type="checkbox" id="toggle-lost" /> Show lost quotes</label>
+      </div>
+      <div id="board-columns" class="board-columns"></div>
+    </section>
+
+    <!-- CUSTOMERS -->
+    <section id="view-customers" class="view hidden">
+      <h2>Customers</h2>
+      <form id="customer-form" class="inline-form">
+        <input type="text" id="cust-number" placeholder="Customer #" required style="width:8em" />
+        <input type="text" id="cust-name" placeholder="Customer name" required />
+        <input type="text" id="cust-contact" placeholder="Contact (email/phone)" />
+        <button type="submit">Add customer</button>
+      </form>
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Name</th><th>Contact</th></tr></thead>
+        <tbody id="customers-tbody"></tbody>
+      </table>
+    </section>
+
+    <!-- NEW JOB -->
+    <section id="view-new-job" class="view hidden">
+      <h2>New Job</h2>
+      <form id="new-job-form">
+        <label>Customer
+          <select id="job-customer" required></select>
+        </label>
+        <label>Description <input type="text" id="job-description" required /></label>
+        <label>Part number <input type="text" id="job-part-number" /></label>
+        <label>Quantity <input type="number" id="job-qty" min="1" value="1" /></label>
+        <label>Due date <input type="date" id="job-due-date" /></label>
+        <button type="submit">Create job</button>
+      </form>
+    </section>
+
+    <!-- JOB DETAIL / TRAVELER -->
+    <section id="view-job-detail" class="view hidden">
+      <div class="traveler-header no-print">
+        <button id="btn-back-to-board">&larr; Back to board</button>
+        <button id="btn-print-job">Print traveler</button>
+      </div>
+
+      <div class="traveler">
+        <div class="traveler-title">
+          <h2 id="jd-job-number">—</h2>
+          <span id="jd-status-badge" class="status-badge">—</span>
+        </div>
+
+        <div class="grid-2">
+          <label>Customer <span id="jd-customer-name" class="readonly-field"></span></label>
+          <label>Status
+            <select id="jd-status"></select>
+          </label>
+          <label>Description <input type="text" id="jd-description" /></label>
+          <label>Part number <input type="text" id="jd-part-number" /></label>
+          <label>Quantity <input type="number" id="jd-qty" min="1" /></label>
+          <label>Due date <input type="date" id="jd-due-date" /></label>
+          <label>Reference class <input type="text" id="jd-reference-class" placeholder="e.g. simple lathe work, stainless" /></label>
+        </div>
+
+        <fieldset>
+          <legend>Quote</legend>
+          <div class="grid-3">
+            <label>RFQ date <input type="date" id="jd-rfq-date" /></label>
+            <label>Quoted price <input type="number" step="0.01" id="jd-quoted-price" /></label>
+            <label>Won date <input type="date" id="jd-won-date" /></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Material</legend>
+          <div class="grid-3">
+            <label>Spec <input type="text" id="jd-mat-spec" /></label>
+            <label>Size / stock <input type="text" id="jd-mat-size" /></label>
+            <label>Supplier <input type="text" id="jd-mat-supplier" /></label>
+            <label>PO reference <input type="text" id="jd-mat-po" /></label>
+            <label>Ordered date <input type="date" id="jd-mat-ordered" /></label>
+            <label>Received date <input type="date" id="jd-mat-received" /></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Operations</legend>
+          <div id="operations-list" class="operations-list"></div>
+          <form id="operation-form" class="inline-form no-print">
+            <input type="text" id="op-name" placeholder="Operation (e.g. Rough turn)" required />
+            <input type="text" id="op-notes" placeholder="Notes" />
+            <button type="submit">Add operation</button>
+          </form>
+        </fieldset>
+
+        <fieldset>
+          <legend>Time log <span id="time-log-total" class="total-badge"></span></legend>
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Operation</th><th>Hours</th><th>Note</th><th class="no-print"></th></tr></thead>
+            <tbody id="time-log-tbody"></tbody>
+          </table>
+          <form id="time-log-form" class="inline-form no-print">
+            <input type="date" id="tl-date" required />
+            <input type="text" id="tl-operation" placeholder="Operation" />
+            <input type="number" step="0.1" min="0" id="tl-hours" placeholder="Hours" required style="width:6em" />
+            <input type="text" id="tl-note" placeholder="Note" />
+            <button type="submit">Add entry</button>
+          </form>
+        </fieldset>
+
+        <fieldset>
+          <legend>Notes</legend>
+          <textarea id="jd-notes" rows="4"></textarea>
+        </fieldset>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
