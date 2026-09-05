@@ -15,6 +15,16 @@ const db = getFirestore(app);
 const $ = (sel) => document.querySelector(sel);
 const $all = (sel) => Array.from(document.querySelectorAll(sel));
 
+let errorTimer = null;
+function showError(err) {
+  console.error(err);
+  const banner = $("#error-banner");
+  banner.textContent = err?.message || String(err);
+  banner.classList.remove("hidden");
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => banner.classList.add("hidden"), 8000);
+}
+
 const STATUSES = [
   { key: "rfq", label: "RFQ" },
   { key: "quoted", label: "Quoted" },
@@ -113,19 +123,27 @@ $("#btn-print-job").addEventListener("click", () => window.print());
 // ---------- Customers ----------
 
 function startListeners() {
-  unsubCustomers = onSnapshot(collection(db, "customers"), (snap) => {
-    customers = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    customers.sort((a, b) => a.customerNumber.localeCompare(b.customerNumber, undefined, { numeric: true }));
-    customersById = Object.fromEntries(customers.map((c) => [c.id, c]));
-    renderCustomers();
-    populateCustomerSelect();
-    renderBoard();
-  });
+  unsubCustomers = onSnapshot(
+    collection(db, "customers"),
+    (snap) => {
+      customers = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      customers.sort((a, b) => a.customerNumber.localeCompare(b.customerNumber, undefined, { numeric: true }));
+      customersById = Object.fromEntries(customers.map((c) => [c.id, c]));
+      renderCustomers();
+      populateCustomerSelect();
+      renderBoard();
+    },
+    showError
+  );
 
-  unsubJobs = onSnapshot(collection(db, "jobs"), (snap) => {
-    jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    renderBoard();
-  });
+  unsubJobs = onSnapshot(
+    collection(db, "jobs"),
+    (snap) => {
+      jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderBoard();
+    },
+    showError
+  );
 }
 
 function renderCustomers() {
@@ -145,15 +163,19 @@ function populateCustomerSelect() {
 
 $("#customer-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await addDoc(collection(db, "customers"), {
-    customerNumber: $("#cust-number").value.trim(),
-    name: $("#cust-name").value.trim(),
-    phone: $("#cust-phone").value.trim(),
-    email: $("#cust-email").value.trim(),
-    createdAt: serverTimestamp(),
-  });
-  $("#customer-form").reset();
-  $("#cust-number").value = suggestNextCustomerNumber();
+  try {
+    await addDoc(collection(db, "customers"), {
+      customerNumber: $("#cust-number").value.trim(),
+      name: $("#cust-name").value.trim(),
+      phone: $("#cust-phone").value.trim(),
+      email: $("#cust-email").value.trim(),
+      createdAt: serverTimestamp(),
+    });
+    $("#customer-form").reset();
+    $("#cust-number").value = suggestNextCustomerNumber();
+  } catch (err) {
+    showError(err);
+  }
 });
 
 // ---------- Board ----------
@@ -197,32 +219,36 @@ $("#new-job-form").addEventListener("submit", async (e) => {
   const customer = customersById[customerId];
   if (!customer) return;
 
-  const existing = await getDocs(query(collection(db, "jobs"), where("customerId", "==", customerId)));
-  const maxSeq = existing.docs.reduce((max, d) => Math.max(max, d.data().sequenceForCustomer || 0), 0);
-  const sequenceForCustomer = maxSeq + 1;
-  const jobNumber = `${customer.customerNumber}-${String(sequenceForCustomer).padStart(3, "0")}`;
+  try {
+    const existing = await getDocs(query(collection(db, "jobs"), where("customerId", "==", customerId)));
+    const maxSeq = existing.docs.reduce((max, d) => Math.max(max, d.data().sequenceForCustomer || 0), 0);
+    const sequenceForCustomer = maxSeq + 1;
+    const jobNumber = `${customer.customerNumber}-${String(sequenceForCustomer).padStart(3, "0")}`;
 
-  const docRef = await addDoc(collection(db, "jobs"), {
-    jobNumber,
-    customerId,
-    customerNumber: customer.customerNumber,
-    sequenceForCustomer,
-    description: $("#job-description").value.trim(),
-    partNumber: $("#job-part-number").value.trim(),
-    qty: Number($("#job-qty").value) || 1,
-    dueDate: $("#job-due-date").value || "",
-    status: "rfq",
-    quote: { rfqDate: "", quotedPrice: "", wonDate: "" },
-    material: { spec: "", size: "", supplier: "", poRef: "", orderedDate: "", receivedDate: "" },
-    operations: [],
-    timeLog: [],
-    referenceClass: "",
-    notes: "",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+    const docRef = await addDoc(collection(db, "jobs"), {
+      jobNumber,
+      customerId,
+      customerNumber: customer.customerNumber,
+      sequenceForCustomer,
+      description: $("#job-description").value.trim(),
+      partNumber: $("#job-part-number").value.trim(),
+      qty: Number($("#job-qty").value) || 1,
+      dueDate: $("#job-due-date").value || "",
+      status: "rfq",
+      quote: { rfqDate: "", quotedPrice: "", wonDate: "" },
+      material: { spec: "", size: "", supplier: "", poRef: "", orderedDate: "", receivedDate: "" },
+      operations: [],
+      timeLog: [],
+      referenceClass: "",
+      notes: "",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
 
-  openJobDetail(docRef.id);
+    openJobDetail(docRef.id);
+  } catch (err) {
+    showError(err);
+  }
 });
 
 // ---------- Job detail / traveler ----------
@@ -231,10 +257,14 @@ function openJobDetail(id) {
   currentJobId = id;
   showView("job-detail");
   if (unsubJobDetail) unsubJobDetail();
-  unsubJobDetail = onSnapshot(doc(db, "jobs", id), (snap) => {
-    if (!snap.exists()) return;
-    renderJobDetail({ id: snap.id, ...snap.data() });
-  });
+  unsubJobDetail = onSnapshot(
+    doc(db, "jobs", id),
+    (snap) => {
+      if (!snap.exists()) return;
+      renderJobDetail({ id: snap.id, ...snap.data() });
+    },
+    showError
+  );
 }
 
 function renderJobDetail(job) {
@@ -280,7 +310,7 @@ function jobRef() {
 }
 
 function saveField(field, value) {
-  updateDoc(jobRef(), { [field]: value, updatedAt: serverTimestamp() });
+  updateDoc(jobRef(), { [field]: value, updatedAt: serverTimestamp() }).catch(showError);
 }
 
 $("#jd-status").addEventListener("change", (e) => saveField("status", e.target.value));

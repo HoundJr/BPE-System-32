@@ -44,6 +44,15 @@ body {
 
 .error { color: var(--danger); font-size: 0.85rem; }
 
+.error-banner {
+  background: #fdecea;
+  color: var(--danger);
+  border-bottom: 1px solid var(--danger);
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 /* Nav */
 .topnav {
   display: flex;
