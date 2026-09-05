@@ -178,35 +178,118 @@ $("#customer-form").addEventListener("submit", async (e) => {
   }
 });
 
-// ---------- Board ----------
+// ---------- Board / calendar ----------
 
-$("#toggle-lost").addEventListener("change", renderBoard);
+let weekOffset = 0;
+
+$("#cal-prev").addEventListener("click", () => { weekOffset -= 1; renderBoard(); });
+$("#cal-next").addEventListener("click", () => { weekOffset += 1; renderBoard(); });
+$("#cal-today").addEventListener("click", () => { weekOffset = 0; renderBoard(); });
+
+function toISODate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function startOfWeek(d) {
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const mondayOffset = (date.getDay() + 6) % 7; // Monday = 0 ... Sunday = 6
+  date.setDate(date.getDate() - mondayOffset);
+  return date;
+}
+
+function statusGroup(status) {
+  if (status === "lost") return "lost";
+  if (status === "shipped" || status === "invoiced") return "done";
+  if (status === "in_progress" || status === "deburr_pack") return "in-progress";
+  return "not-started";
+}
+
+function jobCardHtml(j) {
+  const custName = customersById[j.customerId]?.name || "?";
+  return `
+    <div class="job-card" data-id="${j.id}">
+      <div class="jc-number">${escapeHtml(j.jobNumber)}</div>
+      <div class="jc-desc">${escapeHtml(custName)} — ${escapeHtml(j.description || "")}</div>
+      <div class="jc-due">${escapeHtml(statusLabel(j.status))}</div>
+    </div>`;
+}
 
 function renderBoard() {
-  const showLost = $("#toggle-lost").checked;
-  const visibleStatuses = STATUSES.filter((s) => s.key !== "lost" || showLost);
+  const weekStart = startOfWeek(new Date());
+  weekStart.setDate(weekStart.getDate() + weekOffset * 7);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const weekStartIso = toISODate(days[0]);
+  const weekEndIso = toISODate(days[6]);
+  const todayIso = toISODate(new Date());
 
-  $("#board-columns").innerHTML = visibleStatuses
-    .map((s) => {
-      const colJobs = jobs
-        .filter((j) => j.status === s.key)
-        .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
-      const cards = colJobs
-        .map((j) => {
-          const custName = customersById[j.customerId]?.name || "?";
-          return `
-            <div class="job-card" data-id="${j.id}">
-              <div class="jc-number">${escapeHtml(j.jobNumber)}</div>
-              <div class="jc-desc">${escapeHtml(custName)} — ${escapeHtml(j.description || "")}</div>
-              ${j.dueDate ? `<div class="jc-due">Due ${escapeHtml(j.dueDate)}</div>` : ""}
-            </div>`;
-        })
-        .join("");
-      return `<div class="board-column"><h3>${s.label} (${colJobs.length})</h3>${cards}</div>`;
+  $("#cal-range").textContent = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+
+  $("#cal-header").innerHTML = days
+    .map((d) => {
+      const iso = toISODate(d);
+      return `<div class="cal-day-label ${iso === todayIso ? "today" : ""}">
+        ${d.toLocaleDateString(undefined, { weekday: "short" })}
+        <span class="cal-date-num">${d.getDate()}</span>
+      </div>`;
     })
     .join("");
 
-  $all(".job-card").forEach((card) =>
+  const unscheduled = jobs.filter((j) => !j.dueDate);
+  $("#unscheduled-tray").innerHTML = unscheduled.length
+    ? `<h4>Unscheduled (${unscheduled.length})</h4><div class="unscheduled-list">${unscheduled.map(jobCardHtml).join("")}</div>`
+    : "";
+
+  // jobs whose start-to-due span overlaps the visible week
+  const overlapping = jobs
+    .filter((j) => j.dueDate)
+    .map((j) => ({ job: j, start: j.startDate || j.dueDate, end: j.dueDate }))
+    .filter(({ start, end }) => end >= weekStartIso && start <= weekEndIso)
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  // greedy row-packing so overlapping-date jobs don't share a row
+  const rowEnds = [];
+  overlapping.forEach((item) => {
+    let row = rowEnds.findIndex((endIso) => endIso < item.start);
+    if (row === -1) {
+      row = rowEnds.length;
+    }
+    rowEnds[row] = item.end;
+    item.row = row;
+  });
+
+  const colBackgrounds = days
+    .map((d, i) => {
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      return `<div class="cal-col-bg ${isWeekend ? "weekend" : ""}" style="grid-column:${i + 1};grid-row:1 / -1;"></div>`;
+    })
+    .join("");
+
+  const bars = overlapping
+    .map(({ job, start, end, row }) => {
+      const clampedStart = start < weekStartIso ? weekStartIso : start;
+      const clampedEnd = end > weekEndIso ? weekEndIso : end;
+      const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
+      const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+      const custName = customersById[job.customerId]?.name || "?";
+      const title = `${job.jobNumber} — ${custName} — ${job.description || ""} (${statusLabel(job.status)})`;
+      return `<div class="cal-bar group-${statusGroup(job.status)}" data-id="${job.id}"
+        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1};" title="${escapeHtml(title)}">
+        <span class="cal-bar-status">${escapeHtml(statusLabel(job.status))}</span>
+        <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)}</span>
+      </div>`;
+    })
+    .join("");
+
+  const grid = $("#cal-grid");
+  grid.innerHTML = colBackgrounds + bars;
+  grid.style.gridTemplateRows = `repeat(${Math.max(rowEnds.length, 1)}, 34px)`;
+
+  $all(".cal-bar").forEach((bar) => bar.addEventListener("click", () => openJobDetail(bar.dataset.id)));
+  $all(".unscheduled-list .job-card").forEach((card) =>
     card.addEventListener("click", () => openJobDetail(card.dataset.id))
   );
 }
@@ -233,6 +316,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       description: $("#job-description").value.trim(),
       partNumber: $("#job-part-number").value.trim(),
       qty: Number($("#job-qty").value) || 1,
+      startDate: $("#job-start-date").value || "",
       dueDate: $("#job-due-date").value || "",
       status: "rfq",
       quote: { rfqDate: "", quotedPrice: "", wonDate: "" },
@@ -283,6 +367,7 @@ function renderJobDetail(job) {
   $("#jd-description").value = job.description || "";
   $("#jd-part-number").value = job.partNumber || "";
   $("#jd-qty").value = job.qty || 1;
+  $("#jd-start-date").value = job.startDate || "";
   $("#jd-due-date").value = job.dueDate || "";
   $("#jd-reference-class").value = job.referenceClass || "";
 
@@ -317,6 +402,7 @@ $("#jd-status").addEventListener("change", (e) => saveField("status", e.target.v
 $("#jd-description").addEventListener("change", (e) => saveField("description", e.target.value));
 $("#jd-part-number").addEventListener("change", (e) => saveField("partNumber", e.target.value));
 $("#jd-qty").addEventListener("change", (e) => saveField("qty", Number(e.target.value) || 1));
+$("#jd-start-date").addEventListener("change", (e) => saveField("startDate", e.target.value));
 $("#jd-due-date").addEventListener("change", (e) => saveField("dueDate", e.target.value));
 $("#jd-reference-class").addEventListener("change", (e) => saveField("referenceClass", e.target.value));
 $("#jd-notes").addEventListener("change", (e) => saveField("notes", e.target.value));

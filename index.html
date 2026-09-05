@@ -38,9 +38,16 @@
     <!-- BOARD -->
     <section id="view-board" class="view">
       <div class="board-controls no-print">
-        <label class="show-lost"><input type="checkbox" id="toggle-lost" /> Show lost quotes</label>
+        <button id="cal-prev" class="nav-btn">&larr; Prev week</button>
+        <button id="cal-today" class="nav-btn">This week</button>
+        <button id="cal-next" class="nav-btn">Next week &rarr;</button>
+        <span id="cal-range" class="cal-range"></span>
       </div>
-      <div id="board-columns" class="board-columns"></div>
+      <div id="unscheduled-tray" class="unscheduled-tray"></div>
+      <div class="cal-wrapper">
+        <div id="cal-header" class="cal-header"></div>
+        <div id="cal-grid" class="cal-grid"></div>
+      </div>
     </section>
 
     <!-- CUSTOMERS -->
@@ -69,6 +76,7 @@
         <label>Description <input type="text" id="job-description" required /></label>
         <label>Part number <input type="text" id="job-part-number" /></label>
         <label>Quantity <input type="number" id="job-qty" min="1" value="1" /></label>
+        <label>Start date <input type="date" id="job-start-date" /></label>
         <label>Due date <input type="date" id="job-due-date" /></label>
         <button type="submit">Create job</button>
       </form>
@@ -95,6 +103,7 @@
           <label>Description <input type="text" id="jd-description" /></label>
           <label>Part number <input type="text" id="jd-part-number" /></label>
           <label>Quantity <input type="number" id="jd-qty" min="1" /></label>
+          <label>Start date <input type="date" id="jd-start-date" /></label>
           <label>Due date <input type="date" id="jd-due-date" /></label>
           <label>Reference class <input type="text" id="jd-reference-class" placeholder="e.g. simple lathe work, stainless" /></label>
         </div>

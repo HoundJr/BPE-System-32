@@ -79,35 +79,20 @@ body {
 
 #app-main { padding: 1rem; max-width: 1400px; margin: 0 auto; }
 
-/* Board */
-.board-controls { margin-bottom: 0.75rem; font-size: 0.9rem; color: var(--muted); }
-.board-columns {
+/* Board / calendar */
+.board-controls {
+  margin-bottom: 0.75rem;
   display: flex;
-  gap: var(--col-gap);
-  overflow-x: auto;
-  align-items: flex-start;
+  align-items: center;
+  gap: 0.5rem;
 }
-.board-column {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  min-width: 220px;
-  flex: 1 0 220px;
-  padding: 0.5rem;
-}
-.board-column h3 {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  margin: 0.25rem 0.25rem 0.6rem;
-}
+.cal-range { margin-left: 0.5rem; font-size: 0.9rem; color: var(--muted); }
+
 .job-card {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.5rem 0.6rem;
-  margin-bottom: 0.5rem;
   cursor: pointer;
   font-size: 0.85rem;
 }
@@ -115,6 +100,78 @@ body {
 .job-card .jc-number { font-weight: 700; }
 .job-card .jc-desc { color: var(--muted); margin-top: 0.15rem; }
 .job-card .jc-due { color: var(--muted); font-size: 0.78rem; margin-top: 0.25rem; }
+
+.unscheduled-tray { margin-bottom: 1rem; }
+.unscheduled-tray h4 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+.unscheduled-list { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.unscheduled-list .job-card { min-width: 200px; }
+
+.cal-wrapper {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.cal-header {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+.cal-day-label {
+  padding: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+  border-left: 1px solid var(--border);
+}
+.cal-day-label:first-child { border-left: none; }
+.cal-day-label.today { color: var(--accent); font-weight: 700; background: rgba(47, 111, 237, 0.06); }
+.cal-day-label .cal-date-num { display: block; font-size: 0.95rem; font-weight: 600; color: var(--text); }
+.cal-day-label.today .cal-date-num { color: var(--accent); }
+
+.cal-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  padding: 4px 0;
+}
+.cal-col-bg { border-left: 1px solid var(--border); }
+.cal-col-bg:first-child { border-left: none; }
+.cal-col-bg.weekend { background: rgba(0, 0, 0, 0.025); }
+
+.cal-bar {
+  position: relative;
+  z-index: 1;
+  margin: 2px 4px;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cal-bar .cal-bar-status {
+  opacity: 0.9;
+  font-weight: 700;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.cal-bar.group-not-started { background: #5b8def; }
+.cal-bar.group-in-progress { background: #e0902f; }
+.cal-bar.group-done { background: #3fa25c; }
+.cal-bar.group-lost { background: #9aa2ab; }
 
 /* Forms */
 form label, .traveler label {
