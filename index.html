@@ -48,11 +48,12 @@
       <form id="customer-form" class="inline-form">
         <input type="text" id="cust-number" placeholder="Customer #" required style="width:8em" />
         <input type="text" id="cust-name" placeholder="Customer name" required />
-        <input type="text" id="cust-contact" placeholder="Contact (email/phone)" />
+        <input type="tel" id="cust-phone" placeholder="Phone" />
+        <input type="email" id="cust-email" placeholder="Email" />
         <button type="submit">Add customer</button>
       </form>
       <table class="data-table">
-        <thead><tr><th>#</th><th>Name</th><th>Contact</th></tr></thead>
+        <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Email</th></tr></thead>
         <tbody id="customers-tbody"></tbody>
       </table>
     </section>

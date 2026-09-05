@@ -95,6 +95,18 @@ $("#btn-new-job").addEventListener("click", () => {
   showView("new-job");
 });
 
+function suggestNextCustomerNumber() {
+  const maxNum = customers.reduce((max, c) => {
+    const n = parseInt(c.customerNumber, 10);
+    return Number.isFinite(n) ? Math.max(max, n) : max;
+  }, 0);
+  return String(maxNum + 1);
+}
+
+$('.nav-btn[data-view="customers"]').addEventListener("click", () => {
+  if (!$("#cust-number").value) $("#cust-number").value = suggestNextCustomerNumber();
+});
+
 $("#btn-back-to-board").addEventListener("click", () => showView("board"));
 $("#btn-print-job").addEventListener("click", () => window.print());
 
@@ -120,7 +132,7 @@ function renderCustomers() {
   $("#customers-tbody").innerHTML = customers
     .map(
       (c) =>
-        `<tr><td>${escapeHtml(c.customerNumber)}</td><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.contact || "")}</td></tr>`
+        `<tr><td>${escapeHtml(c.customerNumber)}</td><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.phone || "")}</td><td>${escapeHtml(c.email || "")}</td></tr>`
     )
     .join("");
 }
@@ -136,10 +148,12 @@ $("#customer-form").addEventListener("submit", async (e) => {
   await addDoc(collection(db, "customers"), {
     customerNumber: $("#cust-number").value.trim(),
     name: $("#cust-name").value.trim(),
-    contact: $("#cust-contact").value.trim(),
+    phone: $("#cust-phone").value.trim(),
+    email: $("#cust-email").value.trim(),
     createdAt: serverTimestamp(),
   });
   $("#customer-form").reset();
+  $("#cust-number").value = suggestNextCustomerNumber();
 });
 
 // ---------- Board ----------
