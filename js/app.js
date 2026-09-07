@@ -32,10 +32,27 @@ const STAGE_DEFS = [
     key: "rfq",
     label: "RFQ",
     checklist: [
-      { key: "drawing_received", label: "Drawing received" },
-      { key: "model_received", label: "3D model received" },
-      { key: "customer_supplied_material", label: "Customer supplying material" },
-      { key: "shop_supplied_material", label: "BPE supplying material" },
+      {
+        key: "reference",
+        label: "Reference provided",
+        type: "group",
+        options: [
+          { key: "drawing", label: "Drawing" },
+          { key: "model_3d", label: "3D model" },
+          { key: "sample_part", label: "Sample part" },
+          { key: "none", label: "None" },
+        ],
+      },
+      {
+        key: "material_source",
+        label: "Material",
+        type: "group",
+        options: [
+          { key: "customer_supplied", label: "Customer supplying material" },
+          { key: "shop_supplied", label: "BPE supplying material" },
+          { key: "repair_existing", label: "Repair existing part" },
+        ],
+      },
     ],
     fields: [
       { key: "rfqDate", label: "RFQ date", type: "date" },
@@ -125,15 +142,33 @@ function stageIndex(key) {
 
 function emptyStageChecklists() {
   return Object.fromEntries(
-    STAGE_DEFS.map((s) => [s.key, Object.fromEntries(s.checklist.map((c) => [c.key, false]))])
+    STAGE_DEFS.map((s) => [
+      s.key,
+      Object.fromEntries(
+        s.checklist.map((c) =>
+          c.type === "group"
+            ? [c.key, Object.fromEntries(c.options.map((o) => [o.key, false]))]
+            : [c.key, false]
+        )
+      ),
+    ])
   );
+}
+
+// A group entry (e.g. "Reference provided": Drawing / 3D model / Sample / None)
+// is satisfied once at least one of its options is checked.
+function isChecklistEntrySatisfied(job, stageKey, entry) {
+  if (entry.type === "group") {
+    const groupState = job.stageChecklists?.[stageKey]?.[entry.key] || {};
+    return entry.options.some((o) => groupState[o.key]);
+  }
+  return !!job.stageChecklists?.[stageKey]?.[entry.key];
 }
 
 function isStageComplete(job, stageKey) {
   const stage = STAGE_DEFS.find((s) => s.key === stageKey);
   if (!stage) return true;
-  const state = job.stageChecklists?.[stageKey] || {};
-  const checklistOk = stage.checklist.every((c) => state[c.key]);
+  const checklistOk = stage.checklist.every((c) => isChecklistEntrySatisfied(job, stageKey, c));
   const fieldsOk = stage.fields.every((f) => !f.required || job[f.key]);
   return checklistOk && fieldsOk;
 }
@@ -535,12 +570,25 @@ function renderStageAccordion(job) {
   container.innerHTML = STAGE_DEFS.map((stage, idx) => {
     const state = idx < currentIdx ? "completed" : idx === currentIdx ? "current" : "upcoming";
     const complete = isStageComplete(job, stage.key);
-    const doneCount = stage.checklist.filter((c) => job.stageChecklists?.[stage.key]?.[c.key]).length;
+    const doneCount = stage.checklist.filter((c) => isChecklistEntrySatisfied(job, stage.key, c)).length;
     const isOpen = expandedStages.has(stage.key);
     const mark = state === "completed" ? "✓" : idx + 1;
 
     const checklistHtml = stage.checklist
       .map((c) => {
+        if (c.type === "group") {
+          const groupState = job.stageChecklists?.[stage.key]?.[c.key] || {};
+          const optionsHtml = c.options
+            .map((o) => {
+              const checked = groupState[o.key] ? "checked" : "";
+              return `<label><input type="checkbox" data-stage="${stage.key}" data-group="${c.key}" data-option="${o.key}" ${checked} /> ${escapeHtml(o.label)}</label>`;
+            })
+            .join("");
+          return `<div class="stage-checklist-group">
+            <div class="stage-checklist-group-label">${escapeHtml(c.label)} <span class="stage-hint">(at least one)</span></div>
+            <div class="stage-checklist-group-options">${optionsHtml}</div>
+          </div>`;
+        }
         const checked = job.stageChecklists?.[stage.key]?.[c.key] ? "checked" : "";
         return `<label><input type="checkbox" data-stage="${stage.key}" data-item="${c.key}" ${checked} /> ${escapeHtml(c.label)}</label>`;
       })
@@ -594,11 +642,9 @@ function renderStageAccordion(job) {
 
   $all('.stage-checklist input[type="checkbox"]').forEach((cb) =>
     cb.addEventListener("change", (e) => {
-      const { stage, item } = e.target.dataset;
-      updateDoc(jobRef(), {
-        [`stageChecklists.${stage}.${item}`]: e.target.checked,
-        updatedAt: serverTimestamp(),
-      }).catch(showError);
+      const { stage, item, group, option } = e.target.dataset;
+      const path = group ? `stageChecklists.${stage}.${group}.${option}` : `stageChecklists.${stage}.${item}`;
+      updateDoc(jobRef(), { [path]: e.target.checked, updatedAt: serverTimestamp() }).catch(showError);
     })
   );
 
