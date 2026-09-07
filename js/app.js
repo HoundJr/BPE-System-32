@@ -25,26 +25,119 @@ function showError(err) {
   errorTimer = setTimeout(() => banner.classList.add("hidden"), 8000);
 }
 
-const STATUSES = [
-  { key: "rfq", label: "RFQ" },
-  { key: "quoted", label: "Quoted" },
-  { key: "won", label: "Won" },
-  { key: "material_ordered", label: "Material Ordered" },
-  { key: "po_received", label: "PO Received" },
-  { key: "queued", label: "Queued" },
-  { key: "in_progress", label: "In Progress" },
-  { key: "deburr_pack", label: "Deburr / Pack" },
-  { key: "shipped", label: "Shipped" },
-  { key: "invoiced", label: "Invoiced" },
-  { key: "lost", label: "Lost" },
+// Each stage is a milestone: a checklist that should be complete before moving
+// on, plus whatever record-keeping fields belong to that point in the job.
+const STAGE_DEFS = [
+  {
+    key: "rfq",
+    label: "RFQ",
+    checklist: [
+      { key: "drawing_received", label: "Drawing / 3D model received" },
+      { key: "lead_time_estimated", label: "Lead time estimated" },
+      { key: "material_source_confirmed", label: "Material source confirmed (customer-supplied vs. shop-sourced)" },
+    ],
+    fields: [{ key: "rfqDate", label: "RFQ date", type: "date" }],
+  },
+  {
+    key: "quoted",
+    label: "Quoted",
+    checklist: [{ key: "quote_sent", label: "Quote sent to customer" }],
+    fields: [{ key: "quotedPrice", label: "Quoted price", type: "number" }],
+  },
+  {
+    key: "won",
+    label: "Won",
+    checklist: [
+      { key: "customer_po_recorded", label: "Customer PO recorded" },
+      { key: "terms_confirmed", label: "Price / terms confirmed" },
+    ],
+    fields: [
+      { key: "wonDate", label: "Won date", type: "date" },
+      { key: "customerPoNumber", label: "Customer PO #", type: "text" },
+    ],
+  },
+  {
+    key: "material_ordered",
+    label: "Material Ordered",
+    checklist: [{ key: "material_ordered_confirmed", label: "Material ordered / confirmed in stock" }],
+    fields: [
+      { key: "materialSpec", label: "Spec", type: "text" },
+      { key: "materialSize", label: "Size / stock", type: "text" },
+      { key: "materialSupplier", label: "Supplier", type: "text" },
+      { key: "materialPoRef", label: "Supplier PO reference", type: "text" },
+      { key: "materialOrderedDate", label: "Ordered date", type: "date" },
+    ],
+  },
+  {
+    key: "material_received",
+    label: "Material Received",
+    checklist: [{ key: "material_checked", label: "Material received & checked against spec" }],
+    fields: [{ key: "materialReceivedDate", label: "Received date", type: "date" }],
+  },
+  {
+    key: "queued",
+    label: "Queued",
+    checklist: [
+      { key: "program_ready", label: "Program / tooling ready" },
+      { key: "fixture_ready", label: "Fixture / workholding ready" },
+    ],
+    fields: [],
+  },
+  {
+    key: "in_progress",
+    label: "In Progress",
+    checklist: [{ key: "first_article_approved", label: "First article inspected / approved" }],
+    fields: [],
+  },
+  {
+    key: "deburr_pack",
+    label: "Deburr / Pack",
+    checklist: [
+      { key: "deburr_complete", label: "Deburr complete" },
+      { key: "final_inspection_passed", label: "Final inspection passed" },
+      { key: "packaged", label: "Packaged" },
+    ],
+    fields: [],
+  },
+  {
+    key: "shipped",
+    label: "Shipped",
+    checklist: [{ key: "shipping_confirmed", label: "Shipping confirmation recorded" }],
+    fields: [],
+  },
+  {
+    key: "invoiced",
+    label: "Invoiced",
+    checklist: [{ key: "invoice_sent", label: "Invoice sent" }],
+    fields: [],
+  },
 ];
+const STATUSES = [...STAGE_DEFS.map((s) => ({ key: s.key, label: s.label })), { key: "lost", label: "Lost" }];
 const statusLabel = (key) => STATUSES.find((s) => s.key === key)?.label || key;
+
+function stageIndex(key) {
+  return STAGE_DEFS.findIndex((s) => s.key === key);
+}
+
+function emptyStageChecklists() {
+  return Object.fromEntries(
+    STAGE_DEFS.map((s) => [s.key, Object.fromEntries(s.checklist.map((c) => [c.key, false]))])
+  );
+}
+
+function isStageComplete(job, stageKey) {
+  const stage = STAGE_DEFS.find((s) => s.key === stageKey);
+  if (!stage || stage.checklist.length === 0) return true;
+  const state = job.stageChecklists?.[stageKey] || {};
+  return stage.checklist.every((c) => state[c.key]);
+}
 
 let customers = [];
 let customersById = {};
 let jobs = [];
 let currentJobId = null;
 let currentJobData = null; // local cache of the open job, kept in sync via onSnapshot
+let expandedStages = null; // local UI state (not persisted): which accordion sections are open
 let unsubJobs = null;
 let unsubCustomers = null;
 let unsubJobDetail = null;
@@ -319,8 +412,17 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       startDate: $("#job-start-date").value || "",
       dueDate: $("#job-due-date").value || "",
       status: "rfq",
-      quote: { rfqDate: "", quotedPrice: "", wonDate: "" },
-      material: { spec: "", size: "", supplier: "", poRef: "", orderedDate: "", receivedDate: "" },
+      stageChecklists: emptyStageChecklists(),
+      rfqDate: "",
+      quotedPrice: "",
+      wonDate: "",
+      customerPoNumber: "",
+      materialSpec: "",
+      materialSize: "",
+      materialSupplier: "",
+      materialPoRef: "",
+      materialOrderedDate: "",
+      materialReceivedDate: "",
       operations: [],
       timeLog: [],
       referenceClass: "",
@@ -339,6 +441,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
 
 function openJobDetail(id) {
   currentJobId = id;
+  expandedStages = null;
   showView("job-detail");
   if (unsubJobDetail) unsubJobDetail();
   unsubJobDetail = onSnapshot(
@@ -359,33 +462,16 @@ function renderJobDetail(job) {
     ? `${customersById[job.customerId].customerNumber} — ${customersById[job.customerId].name}`
     : "";
 
-  if (!$("#jd-status").dataset.filled) {
-    $("#jd-status").innerHTML = STATUSES.map((s) => `<option value="${s.key}">${s.label}</option>`).join("");
-    $("#jd-status").dataset.filled = "1";
-  }
-  $("#jd-status").value = job.status;
   $("#jd-description").value = job.description || "";
   $("#jd-part-number").value = job.partNumber || "";
   $("#jd-qty").value = job.qty || 1;
   $("#jd-start-date").value = job.startDate || "";
   $("#jd-due-date").value = job.dueDate || "";
   $("#jd-reference-class").value = job.referenceClass || "";
-
-  const q = job.quote || {};
-  $("#jd-rfq-date").value = q.rfqDate || "";
-  $("#jd-quoted-price").value = q.quotedPrice || "";
-  $("#jd-won-date").value = q.wonDate || "";
-
-  const m = job.material || {};
-  $("#jd-mat-spec").value = m.spec || "";
-  $("#jd-mat-size").value = m.size || "";
-  $("#jd-mat-supplier").value = m.supplier || "";
-  $("#jd-mat-po").value = m.poRef || "";
-  $("#jd-mat-ordered").value = m.orderedDate || "";
-  $("#jd-mat-received").value = m.receivedDate || "";
-
   $("#jd-notes").value = job.notes || "";
 
+  renderLostControl(job);
+  renderStageAccordion(job);
   renderOperations(job.operations || []);
   renderTimeLog(job.timeLog || []);
 }
@@ -398,7 +484,6 @@ function saveField(field, value) {
   updateDoc(jobRef(), { [field]: value, updatedAt: serverTimestamp() }).catch(showError);
 }
 
-$("#jd-status").addEventListener("change", (e) => saveField("status", e.target.value));
 $("#jd-description").addEventListener("change", (e) => saveField("description", e.target.value));
 $("#jd-part-number").addEventListener("change", (e) => saveField("partNumber", e.target.value));
 $("#jd-qty").addEventListener("change", (e) => saveField("qty", Number(e.target.value) || 1));
@@ -407,28 +492,132 @@ $("#jd-due-date").addEventListener("change", (e) => saveField("dueDate", e.targe
 $("#jd-reference-class").addEventListener("change", (e) => saveField("referenceClass", e.target.value));
 $("#jd-notes").addEventListener("change", (e) => saveField("notes", e.target.value));
 
-function saveQuoteField(key, value) {
-  const current = { ...(currentJobData?.quote || {}) };
-  current[key] = value;
-  saveField("quote", current);
-}
-["jd-rfq-date", "jd-quoted-price", "jd-won-date"].forEach((id) => {
-  const key = { "jd-rfq-date": "rfqDate", "jd-quoted-price": "quotedPrice", "jd-won-date": "wonDate" }[id];
-  $(`#${id}`).addEventListener("change", (e) => saveQuoteField(key, e.target.value));
-});
+// ---------- Stage accordion ----------
 
-function saveMaterialField(key, value) {
-  const current = { ...(currentJobData?.material || {}) };
-  current[key] = value;
-  saveField("material", current);
+function setStatus(newStatus, focusStage) {
+  expandedStages = new Set([focusStage || newStatus]);
+  saveField("status", newStatus);
 }
-const matFieldMap = {
-  "jd-mat-spec": "spec", "jd-mat-size": "size", "jd-mat-supplier": "supplier",
-  "jd-mat-po": "poRef", "jd-mat-ordered": "orderedDate", "jd-mat-received": "receivedDate",
-};
-Object.keys(matFieldMap).forEach((id) => {
-  $(`#${id}`).addEventListener("change", (e) => saveMaterialField(matFieldMap[id], e.target.value));
-});
+
+function renderLostControl(job) {
+  const el = $("#lost-control");
+  if (job.status === "lost") {
+    el.innerHTML = `<div class="lost-banner">
+      <span>This quote was marked as lost.</span>
+      <button type="button" id="btn-reopen-lost">Reopen (back to RFQ)</button>
+    </div>`;
+    $("#btn-reopen-lost").addEventListener("click", () => setStatus("rfq"));
+  } else if (["rfq", "quoted", "won"].includes(job.status)) {
+    el.innerHTML = `<button type="button" id="btn-mark-lost">Mark as lost</button>`;
+    $("#btn-mark-lost").addEventListener("click", () => setStatus("lost"));
+  } else {
+    el.innerHTML = "";
+  }
+}
+
+function renderStageAccordion(job) {
+  const container = $("#stage-accordion");
+  if (job.status === "lost") {
+    container.innerHTML = "";
+    return;
+  }
+
+  const currentIdx = Math.max(stageIndex(job.status), 0);
+  if (expandedStages === null) expandedStages = new Set([job.status]);
+
+  container.innerHTML = STAGE_DEFS.map((stage, idx) => {
+    const state = idx < currentIdx ? "completed" : idx === currentIdx ? "current" : "upcoming";
+    const complete = isStageComplete(job, stage.key);
+    const doneCount = stage.checklist.filter((c) => job.stageChecklists?.[stage.key]?.[c.key]).length;
+    const isOpen = expandedStages.has(stage.key);
+    const mark = state === "completed" ? "✓" : idx + 1;
+
+    const checklistHtml = stage.checklist
+      .map((c) => {
+        const checked = job.stageChecklists?.[stage.key]?.[c.key] ? "checked" : "";
+        return `<label><input type="checkbox" data-stage="${stage.key}" data-item="${c.key}" ${checked} /> ${escapeHtml(c.label)}</label>`;
+      })
+      .join("");
+
+    const fieldsHtml = stage.fields
+      .map((f) => {
+        const value = job[f.key] ?? "";
+        const type = f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
+        const step = f.type === "number" ? ' step="0.01"' : "";
+        return `<label>${escapeHtml(f.label)} <input type="${type}"${step} data-field="${f.key}" value="${escapeHtml(value)}" /></label>`;
+      })
+      .join("");
+
+    const isLastStage = idx === STAGE_DEFS.length - 1;
+    let actionsHtml = "";
+    if (state === "current" && !isLastStage) {
+      actionsHtml = `<div class="stage-actions">
+        <button type="button" class="stage-advance" ${complete ? "" : "disabled"}>Mark complete &amp; continue &rarr;</button>
+        ${!complete ? '<button type="button" class="stage-override">advance anyway</button>' : ""}
+      </div>`;
+    } else if (state === "completed") {
+      actionsHtml = `<div class="stage-actions">
+        <button type="button" class="stage-reopen">Reopen — move job back to this stage</button>
+      </div>`;
+    }
+
+    return `<div class="stage-section ${state}" data-stage="${stage.key}">
+      <div class="stage-header">
+        <span class="stage-mark">${mark}</span>
+        <span>${escapeHtml(stage.label)}</span>
+        ${stage.checklist.length ? `<span class="stage-progress">${doneCount}/${stage.checklist.length}</span>` : ""}
+        <span class="stage-caret">${isOpen ? "▾" : "▸"}</span>
+      </div>
+      <div class="stage-body ${isOpen ? "" : "collapsed"}">
+        ${checklistHtml ? `<div class="stage-checklist">${checklistHtml}</div>` : ""}
+        ${fieldsHtml ? `<div class="stage-fields">${fieldsHtml}</div>` : ""}
+        ${actionsHtml}
+      </div>
+    </div>`;
+  }).join("");
+
+  $all(".stage-header").forEach((header) =>
+    header.addEventListener("click", () => {
+      const key = header.closest(".stage-section").dataset.stage;
+      if (expandedStages.has(key)) expandedStages.delete(key);
+      else expandedStages.add(key);
+      renderStageAccordion(currentJobData);
+    })
+  );
+
+  $all('.stage-checklist input[type="checkbox"]').forEach((cb) =>
+    cb.addEventListener("change", (e) => {
+      const { stage, item } = e.target.dataset;
+      updateDoc(jobRef(), {
+        [`stageChecklists.${stage}.${item}`]: e.target.checked,
+        updatedAt: serverTimestamp(),
+      }).catch(showError);
+    })
+  );
+
+  $all(".stage-fields input").forEach((input) =>
+    input.addEventListener("change", (e) => saveField(e.target.dataset.field, e.target.value))
+  );
+
+  $all(".stage-advance").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const nextStage = STAGE_DEFS[currentIdx + 1];
+      if (nextStage) setStatus(nextStage.key);
+    })
+  );
+  $all(".stage-override").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const nextStage = STAGE_DEFS[currentIdx + 1];
+      if (nextStage) setStatus(nextStage.key);
+    })
+  );
+  $all(".stage-reopen").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const key = btn.closest(".stage-section").dataset.stage;
+      setStatus(key);
+    })
+  );
+}
 
 // ---------- Operations ----------
 
