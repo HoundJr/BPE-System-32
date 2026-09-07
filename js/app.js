@@ -32,11 +32,15 @@ const STAGE_DEFS = [
     key: "rfq",
     label: "RFQ",
     checklist: [
-      { key: "drawing_received", label: "Drawing / 3D model received" },
-      { key: "lead_time_estimated", label: "Lead time estimated" },
-      { key: "material_source_confirmed", label: "Material source confirmed (customer-supplied vs. shop-sourced)" },
+      { key: "drawing_received", label: "Drawing received" },
+      { key: "model_received", label: "3D model received" },
+      { key: "customer_supplied_material", label: "Customer supplying material" },
+      { key: "shop_supplied_material", label: "BPE supplying material" },
     ],
-    fields: [{ key: "rfqDate", label: "RFQ date", type: "date" }],
+    fields: [
+      { key: "rfqDate", label: "RFQ date", type: "date" },
+      { key: "expectedCompletionDate", label: "Expected completion date", type: "date", required: true },
+    ],
   },
   {
     key: "quoted",
@@ -127,9 +131,11 @@ function emptyStageChecklists() {
 
 function isStageComplete(job, stageKey) {
   const stage = STAGE_DEFS.find((s) => s.key === stageKey);
-  if (!stage || stage.checklist.length === 0) return true;
+  if (!stage) return true;
   const state = job.stageChecklists?.[stageKey] || {};
-  return stage.checklist.every((c) => state[c.key]);
+  const checklistOk = stage.checklist.every((c) => state[c.key]);
+  const fieldsOk = stage.fields.every((f) => !f.required || job[f.key]);
+  return checklistOk && fieldsOk;
 }
 
 let customers = [];
@@ -414,6 +420,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       status: "rfq",
       stageChecklists: emptyStageChecklists(),
       rfqDate: "",
+      expectedCompletionDate: "",
       quotedPrice: "",
       wonDate: "",
       customerPoNumber: "",
@@ -494,9 +501,9 @@ $("#jd-notes").addEventListener("change", (e) => saveField("notes", e.target.val
 
 // ---------- Stage accordion ----------
 
-function setStatus(newStatus, focusStage) {
+function setStatus(newStatus, focusStage, extraFields = {}) {
   expandedStages = new Set([focusStage || newStatus]);
-  saveField("status", newStatus);
+  updateDoc(jobRef(), { status: newStatus, ...extraFields, updatedAt: serverTimestamp() }).catch(showError);
 }
 
 function renderLostControl(job) {
@@ -544,7 +551,7 @@ function renderStageAccordion(job) {
         const value = job[f.key] ?? "";
         const type = f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
         const step = f.type === "number" ? ' step="0.01"' : "";
-        return `<label>${escapeHtml(f.label)} <input type="${type}"${step} data-field="${f.key}" value="${escapeHtml(value)}" /></label>`;
+        return `<label>${escapeHtml(f.label)}${f.required ? " *" : ""} <input type="${type}"${step} data-field="${f.key}" value="${escapeHtml(value)}" /></label>`;
       })
       .join("");
 
@@ -599,18 +606,15 @@ function renderStageAccordion(job) {
     input.addEventListener("change", (e) => saveField(e.target.dataset.field, e.target.value))
   );
 
-  $all(".stage-advance").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      const nextStage = STAGE_DEFS[currentIdx + 1];
-      if (nextStage) setStatus(nextStage.key);
-    })
-  );
-  $all(".stage-override").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      const nextStage = STAGE_DEFS[currentIdx + 1];
-      if (nextStage) setStatus(nextStage.key);
-    })
-  );
+  function advanceFromCurrentStage() {
+    const nextStage = STAGE_DEFS[currentIdx + 1];
+    if (!nextStage) return;
+    const currentStage = STAGE_DEFS[currentIdx];
+    const extraFields = currentStage.key === "rfq" && !job.rfqDate ? { rfqDate: toISODate(new Date()) } : {};
+    setStatus(nextStage.key, undefined, extraFields);
+  }
+  $all(".stage-advance").forEach((btn) => btn.addEventListener("click", advanceFromCurrentStage));
+  $all(".stage-override").forEach((btn) => btn.addEventListener("click", advanceFromCurrentStage));
   $all(".stage-reopen").forEach((btn) =>
     btn.addEventListener("click", () => {
       const key = btn.closest(".stage-section").dataset.stage;
