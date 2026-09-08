@@ -53,6 +53,20 @@ const STAGE_DEFS = [
           { key: "repair_existing", label: "Repair existing part" },
         ],
       },
+      {
+        key: "tooling",
+        label: "Tooling",
+        type: "subsection",
+        items: [
+          { key: "special_tooling_required", label: "Special tooling required", optional: true },
+          { key: "checked_existing_tooling", label: "Checked existing tooling" },
+        ],
+        textField: {
+          key: "specialToolingDescription",
+          label: "Special tooling needed",
+          showIf: (job) => !!job.stageChecklists?.rfq?.tooling?.special_tooling_required,
+        },
+      },
     ],
     fields: [
       { key: "rfqDate", label: "RFQ date", type: "date" },
@@ -89,6 +103,7 @@ const STAGE_DEFS = [
       const src = job.stageChecklists?.rfq?.material_source || {};
       return !!(src.customer_supplied || src.repair_existing);
     },
+    skipMessage: "Not needed — customer supplying material or repairing an existing part.",
     checklist: [{ key: "material_ordered_confirmed", label: "Material ordered / confirmed in stock" }],
     fields: [
       { key: "materialSpec", label: "Spec", type: "text" },
@@ -97,6 +112,15 @@ const STAGE_DEFS = [
       { key: "materialPoRef", label: "Supplier PO reference", type: "text" },
       { key: "materialOrderedDate", label: "Ordered date", type: "date" },
     ],
+  },
+  {
+    key: "tooling_ordered",
+    label: "Tooling Ordered",
+    // Not needed unless the RFQ flagged special tooling as required.
+    skipIf: (job) => !job.stageChecklists?.rfq?.tooling?.special_tooling_required,
+    skipMessage: "Not needed — no special tooling was flagged as required in the RFQ.",
+    checklist: [{ key: "tooling_ordered_confirmed", label: "Special tooling ordered / confirmed" }],
+    fields: [{ key: "specialToolingDescription", label: "Special tooling needed", type: "text", readonly: true }],
   },
   {
     key: "material_received",
@@ -171,6 +195,8 @@ function emptyStageChecklists() {
         s.checklist.map((c) =>
           c.type === "group"
             ? [c.key, Object.fromEntries(c.options.map((o) => [o.key, false]))]
+            : c.type === "subsection"
+            ? [c.key, Object.fromEntries(c.items.map((i) => [i.key, false]))]
             : [c.key, false]
         )
       ),
@@ -188,6 +214,10 @@ function isChecklistEntrySatisfied(job, stageKey, entry) {
   if (entry.type === "group") {
     const groupState = job.stageChecklists?.[stageKey]?.[entry.key] || {};
     return entry.options.some((o) => groupState[o.key]);
+  }
+  if (entry.type === "subsection") {
+    const subState = job.stageChecklists?.[stageKey]?.[entry.key] || {};
+    return entry.items.every((i) => i.optional || !!subState[i.key]);
   }
   return !!job.stageChecklists?.[stageKey]?.[entry.key];
 }
@@ -556,6 +586,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       rfqDate: "",
       expectedCompletionDate: "",
       expectedHours: "",
+      specialToolingDescription: "",
       quotedDate: "",
       quotedPrice: "",
       wonDate: "",
@@ -709,6 +740,26 @@ function renderStageAccordion(job) {
             <div class="stage-checklist-group-options">${optionsHtml}</div>
           </div>`;
         }
+        if (c.type === "subsection") {
+          const subState = job.stageChecklists?.[stage.key]?.[c.key] || {};
+          const itemsHtml = c.items
+            .map((i) => {
+              const checked = subState[i.key] ? "checked" : "";
+              const hint = i.optional ? '<span class="stage-hint">(optional)</span>' : "";
+              return `<label><input type="checkbox" data-stage="${stage.key}" data-group="${c.key}" data-option="${i.key}" ${checked} /> ${escapeHtml(i.label)} ${hint}</label>`;
+            })
+            .join("");
+          const tf = c.textField;
+          const showText = tf && (!tf.showIf || tf.showIf(job));
+          const textHtml = showText
+            ? `<label>${escapeHtml(tf.label)} <input type="text" data-field="${tf.key}" value="${escapeHtml(job[tf.key] || "")}" /></label>`
+            : "";
+          return `<div class="stage-checklist-group">
+            <div class="stage-checklist-group-label">${escapeHtml(c.label)}</div>
+            <div class="stage-checklist-group-options">${itemsHtml}</div>
+            ${textHtml}
+          </div>`;
+        }
         const itemSkipped = !!(c.skipIf && c.skipIf(job));
         const checked = job.stageChecklists?.[stage.key]?.[c.key] ? "checked" : "";
         const hint = c.optional
@@ -723,6 +774,9 @@ function renderStageAccordion(job) {
     const fieldsHtml = stage.fields
       .map((f) => {
         const value = job[f.key] ?? "";
+        if (f.readonly) {
+          return `<label>${escapeHtml(f.label)}<span class="readonly-field">${escapeHtml(value) || "—"}</span></label>`;
+        }
         const type = f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
         const step = f.type === "number" ? ' step="0.01"' : "";
         return `<label>${escapeHtml(f.label)}${f.required ? " *" : ""} <input type="${type}"${step} data-field="${f.key}" value="${escapeHtml(value)}" /></label>`;
@@ -750,7 +804,7 @@ function renderStageAccordion(job) {
         <span class="stage-caret">${isOpen ? "▾" : "▸"}</span>
       </div>
       <div class="stage-body ${isOpen ? "" : "collapsed"} ${stageSkipped ? "stage-body-skipped" : ""}">
-        ${stageSkipped ? '<p class="stage-hint">Not needed — customer supplying material or repairing an existing part.</p>' : ""}
+        ${stageSkipped ? `<p class="stage-hint">${escapeHtml(stage.skipMessage || "Not needed for this job.")}</p>` : ""}
         ${checklistHtml ? `<div class="stage-checklist">${checklistHtml}</div>` : ""}
         ${fieldsHtml ? `<div class="stage-fields">${fieldsHtml}</div>` : ""}
         ${actionsHtml}
@@ -775,7 +829,7 @@ function renderStageAccordion(job) {
     })
   );
 
-  $all(".stage-fields input").forEach((input) =>
+  $all(".stage-body input[data-field]").forEach((input) =>
     input.addEventListener("change", (e) => saveField(e.target.dataset.field, e.target.value))
   );
 
