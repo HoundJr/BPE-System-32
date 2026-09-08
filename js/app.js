@@ -57,6 +57,7 @@ const STAGE_DEFS = [
     fields: [
       { key: "rfqDate", label: "RFQ date", type: "date" },
       { key: "expectedCompletionDate", label: "Expected completion date", type: "date", required: true },
+      { key: "expectedHours", label: "Expected hours", type: "number" },
     ],
   },
   {
@@ -364,18 +365,22 @@ function formatCurrency(n) {
 
 function renderCashflowSummary(weekStartIso, weekEndIso) {
   const inWeek = (dateStr) => dateStr && dateStr >= weekStartIso && dateStr <= weekEndIso;
-  const sumByDate = (dateField) =>
-    jobs.filter((j) => inWeek(j[dateField])).reduce((total, j) => total + (Number(j.quotedPrice) || 0), 0);
+  const sumByDate = (dateField, valueField) =>
+    jobs.filter((j) => inWeek(j[dateField])).reduce((total, j) => total + (Number(j[valueField]) || 0), 0);
 
-  const stats = [
-    ["Quoted", sumByDate("quotedDate")],
-    ["Won", sumByDate("wonDate")],
-    ["Invoiced", sumByDate("invoicedDate")],
+  const moneyStats = [
+    ["Quoted this week", sumByDate("quotedDate", "quotedPrice")],
+    ["Won this week", sumByDate("wonDate", "quotedPrice")],
+    ["Invoiced this week", sumByDate("invoicedDate", "quotedPrice")],
+    ["Scheduled this week", sumByDate("dueDate", "quotedPrice")],
   ];
+  const scheduledHours = sumByDate("dueDate", "expectedHours");
 
-  $("#cashflow-summary").innerHTML = stats
-    .map(([label, total]) => `<span class="cashflow-stat"><span class="cashflow-label">${label} this week</span>${formatCurrency(total)}</span>`)
-    .join("");
+  $("#cashflow-summary").innerHTML =
+    moneyStats
+      .map(([label, total]) => `<span class="cashflow-stat"><span class="cashflow-label">${label}</span>${formatCurrency(total)}</span>`)
+      .join("") +
+    `<span class="cashflow-stat"><span class="cashflow-label">Scheduled hours</span>${scheduledHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs</span>`;
 }
 
 function renderBoard() {
@@ -488,6 +493,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       stageChecklists: emptyStageChecklists(),
       rfqDate: "",
       expectedCompletionDate: "",
+      expectedHours: "",
       quotedDate: "",
       quotedPrice: "",
       wonDate: "",
