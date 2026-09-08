@@ -291,20 +291,23 @@ $all(".nav-btn[data-view]").forEach((btn) =>
   btn.addEventListener("click", () => showView(btn.dataset.view))
 );
 
-$("#btn-new-job").addEventListener("click", () => {
-  populateCustomerSelect();
-  $("#new-job-form").reset();
-  $("#new-customer-fields").classList.add("hidden");
-  showView("new-job");
-});
-
-$("#job-customer").addEventListener("change", (e) => {
-  const isNew = e.target.value === "__new__";
+function syncNewCustomerFieldsVisibility() {
+  const isNew = $("#job-customer").value === "__new__";
   $("#new-customer-fields").classList.toggle("hidden", !isNew);
   if (isNew && !$("#job-new-cust-number").value) {
     $("#job-new-cust-number").value = suggestNextCustomerNumber();
   }
+}
+
+$("#btn-new-job").addEventListener("click", () => {
+  populateCustomerSelect();
+  $("#new-job-form").reset();
+  if (customers.length) $("#job-customer").value = customers[0].id;
+  syncNewCustomerFieldsVisibility();
+  showView("new-job");
 });
+
+$("#job-customer").addEventListener("change", syncNewCustomerFieldsVisibility);
 
 function suggestNextCustomerNumber() {
   const maxNum = customers.reduce((max, c) => {
@@ -365,7 +368,7 @@ function customerOptionsHtml() {
 }
 
 function populateCustomerSelect() {
-  $("#job-customer").innerHTML = customerOptionsHtml() + `<option value="__new__">+ New customer…</option>`;
+  $("#job-customer").innerHTML = `<option value="__new__">+ New customer…</option>` + customerOptionsHtml();
 }
 
 $("#customer-form").addEventListener("submit", async (e) => {
