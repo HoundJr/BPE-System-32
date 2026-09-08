@@ -268,6 +268,8 @@ $("#btn-print-job").addEventListener("click", () => window.print());
 // ---------- Customers ----------
 
 function startListeners() {
+  renderStatusLegend();
+
   unsubCustomers = onSnapshot(
     collection(db, "customers"),
     (snap) => {
@@ -342,11 +344,25 @@ function startOfWeek(d) {
   return date;
 }
 
-function statusGroup(status) {
-  if (status === "lost") return "lost";
-  if (status === "shipped" || status === "invoiced") return "done";
-  if (status === "in_progress" || status === "deburr_pack") return "in-progress";
-  return "not-started";
+const STATUS_COLORS = {
+  rfq: "#64748b",
+  quoted: "#7c6ff0",
+  won: "#2f6fed",
+  material_ordered: "#f5a524",
+  material_received: "#e08b2f",
+  queued: "#06b6d4",
+  in_progress: "#f0592b",
+  deburr_pack: "#ec4899",
+  shipped: "#22c55e",
+  invoiced: "#15803d",
+  lost: "#9aa2ab",
+};
+const statusColor = (key) => STATUS_COLORS[key] || "#5b8def";
+
+function renderStatusLegend() {
+  $("#status-legend").innerHTML = STATUSES.map(
+    (s) => `<span class="legend-item"><span class="legend-swatch" style="background:${statusColor(s.key)}"></span>${escapeHtml(s.label)}</span>`
+  ).join("");
 }
 
 function jobCardHtml(j) {
@@ -447,10 +463,10 @@ function renderBoard() {
       const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
       const custName = customersById[job.customerId]?.name || "?";
       const title = `${job.jobNumber} — ${custName} — ${job.description || ""} (${statusLabel(job.status)})`;
-      return `<div class="cal-bar group-${statusGroup(job.status)}" data-id="${job.id}"
-        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1};" title="${escapeHtml(title)}">
+      return `<div class="cal-bar" data-id="${job.id}"
+        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1}; background:${statusColor(job.status)};" title="${escapeHtml(title)}">
         <span class="cal-bar-status">${escapeHtml(statusLabel(job.status))}</span>
-        <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)}</span>
+        <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)} — ${escapeHtml(job.description || "")}</span>
       </div>`;
     })
     .join("");
