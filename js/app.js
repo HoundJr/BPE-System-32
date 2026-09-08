@@ -294,7 +294,16 @@ $all(".nav-btn[data-view]").forEach((btn) =>
 $("#btn-new-job").addEventListener("click", () => {
   populateCustomerSelect();
   $("#new-job-form").reset();
+  $("#new-customer-fields").classList.add("hidden");
   showView("new-job");
+});
+
+$("#job-customer").addEventListener("change", (e) => {
+  const isNew = e.target.value === "__new__";
+  $("#new-customer-fields").classList.toggle("hidden", !isNew);
+  if (isNew && !$("#job-new-cust-number").value) {
+    $("#job-new-cust-number").value = suggestNextCustomerNumber();
+  }
 });
 
 function suggestNextCustomerNumber() {
@@ -356,7 +365,7 @@ function customerOptionsHtml() {
 }
 
 function populateCustomerSelect() {
-  $("#job-customer").innerHTML = customerOptionsHtml();
+  $("#job-customer").innerHTML = customerOptionsHtml() + `<option value="__new__">+ New customer…</option>`;
 }
 
 $("#customer-form").addEventListener("submit", async (e) => {
@@ -553,23 +562,40 @@ function renderBoard() {
 
 // Computes the next job-number sequence for a customer by checking existing
 // jobs; shared between creating a new job and reassigning an existing one.
-async function nextJobNumberFields(customerId) {
-  const customer = customersById[customerId];
+// Takes customerNumber directly (rather than looking it up) so it also works
+// for a customer just created this instant, before the customers listener
+// has caught up.
+async function nextJobNumberFields(customerId, customerNumber) {
   const existing = await getDocs(query(collection(db, "jobs"), where("customerId", "==", customerId)));
   const maxSeq = existing.docs.reduce((max, d) => Math.max(max, d.data().sequenceForCustomer || 0), 0);
   const sequenceForCustomer = maxSeq + 1;
-  const jobNumber = `${customer.customerNumber}-${String(sequenceForCustomer).padStart(3, "0")}`;
-  return { customerNumber: customer.customerNumber, sequenceForCustomer, jobNumber };
+  const jobNumber = `${customerNumber}-${String(sequenceForCustomer).padStart(3, "0")}`;
+  return { customerNumber, sequenceForCustomer, jobNumber };
 }
 
 $("#new-job-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const customerId = $("#job-customer").value;
-  const customer = customersById[customerId];
-  if (!customer) return;
+  let customerId = $("#job-customer").value;
+  let customerNumber;
 
   try {
-    const { customerNumber, sequenceForCustomer, jobNumber } = await nextJobNumberFields(customerId);
+    if (customerId === "__new__") {
+      customerNumber = $("#job-new-cust-number").value.trim();
+      const newCustomerRef = await addDoc(collection(db, "customers"), {
+        customerNumber,
+        name: $("#job-new-cust-name").value.trim(),
+        phone: $("#job-new-cust-phone").value.trim(),
+        email: $("#job-new-cust-email").value.trim(),
+        createdAt: serverTimestamp(),
+      });
+      customerId = newCustomerRef.id;
+    } else {
+      const customer = customersById[customerId];
+      if (!customer) return;
+      customerNumber = customer.customerNumber;
+    }
+
+    const { sequenceForCustomer, jobNumber } = await nextJobNumberFields(customerId, customerNumber);
 
     const docRef = await addDoc(collection(db, "jobs"), {
       jobNumber,
@@ -669,8 +695,10 @@ $("#jd-notes").addEventListener("change", (e) => saveField("notes", e.target.val
 $("#jd-customer-select").addEventListener("change", async (e) => {
   const newCustomerId = e.target.value;
   if (!newCustomerId || newCustomerId === currentJobData?.customerId) return;
+  const newCustomer = customersById[newCustomerId];
+  if (!newCustomer) return;
   try {
-    const { customerNumber, sequenceForCustomer, jobNumber } = await nextJobNumberFields(newCustomerId);
+    const { customerNumber, sequenceForCustomer, jobNumber } = await nextJobNumberFields(newCustomerId, newCustomer.customerNumber);
     await updateDoc(jobRef(), {
       customerId: newCustomerId,
       customerNumber,
