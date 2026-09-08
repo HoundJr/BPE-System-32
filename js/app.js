@@ -73,7 +73,7 @@ const STAGE_DEFS = [
     key: "won",
     label: "Won",
     checklist: [
-      { key: "customer_po_recorded", label: "Customer PO recorded" },
+      { key: "customer_po_recorded", label: "Customer PO recorded", optional: true },
       { key: "terms_confirmed", label: "Price / terms confirmed" },
     ],
     fields: [
@@ -84,6 +84,11 @@ const STAGE_DEFS = [
   {
     key: "material_ordered",
     label: "Material Ordered",
+    // Not needed when the customer is supplying material or it's a repair job.
+    skipIf: (job) => {
+      const src = job.stageChecklists?.rfq?.material_source || {};
+      return !!(src.customer_supplied || src.repair_existing);
+    },
     checklist: [{ key: "material_ordered_confirmed", label: "Material ordered / confirmed in stock" }],
     fields: [
       { key: "materialSpec", label: "Spec", type: "text" },
@@ -103,8 +108,15 @@ const STAGE_DEFS = [
     key: "queued",
     label: "Queued",
     checklist: [
-      { key: "program_ready", label: "Program / tooling ready" },
+      { key: "programmed", label: "Programmed" },
+      { key: "special_tooling_ready", label: "Special tooling ready", optional: true },
       { key: "fixture_ready", label: "Fixture / workholding ready" },
+      { key: "traveler_printed", label: "Traveler printed" },
+      {
+        key: "drawings_printed",
+        label: "Drawings printed",
+        skipIf: (job) => !job.stageChecklists?.rfq?.reference?.drawing,
+      },
     ],
     fields: [],
   },
@@ -167,8 +179,12 @@ function emptyStageChecklists() {
 }
 
 // A group entry (e.g. "Reference provided": Drawing / 3D model / Sample / None)
-// is satisfied once at least one of its options is checked.
+// is satisfied once at least one of its options is checked. An "optional"
+// entry, or one whose skipIf(job) says it doesn't apply to this job, never
+// blocks stage completion regardless of whether it's checked.
 function isChecklistEntrySatisfied(job, stageKey, entry) {
+  if (entry.optional) return true;
+  if (entry.skipIf && entry.skipIf(job)) return true;
   if (entry.type === "group") {
     const groupState = job.stageChecklists?.[stageKey]?.[entry.key] || {};
     return entry.options.some((o) => groupState[o.key]);
@@ -179,6 +195,7 @@ function isChecklistEntrySatisfied(job, stageKey, entry) {
 function isStageComplete(job, stageKey) {
   const stage = STAGE_DEFS.find((s) => s.key === stageKey);
   if (!stage) return true;
+  if (stage.skipIf && stage.skipIf(job)) return true;
   const checklistOk = stage.checklist.every((c) => isChecklistEntrySatisfied(job, stageKey, c));
   const fieldsOk = stage.fields.every((f) => !f.required || job[f.key]);
   return checklistOk && fieldsOk;
@@ -671,7 +688,9 @@ function renderStageAccordion(job) {
   container.innerHTML = STAGE_DEFS.map((stage, idx) => {
     const state = idx < currentIdx ? "completed" : idx === currentIdx ? "current" : "upcoming";
     const complete = isStageComplete(job, stage.key);
-    const doneCount = stage.checklist.filter((c) => isChecklistEntrySatisfied(job, stage.key, c)).length;
+    const stageSkipped = !!(stage.skipIf && stage.skipIf(job));
+    const requiredChecklist = stage.checklist.filter((c) => !c.optional);
+    const doneCount = requiredChecklist.filter((c) => isChecklistEntrySatisfied(job, stage.key, c)).length;
     const isOpen = expandedStages.has(stage.key);
     const mark = state === "completed" ? "✓" : idx + 1;
 
@@ -690,8 +709,14 @@ function renderStageAccordion(job) {
             <div class="stage-checklist-group-options">${optionsHtml}</div>
           </div>`;
         }
+        const itemSkipped = !!(c.skipIf && c.skipIf(job));
         const checked = job.stageChecklists?.[stage.key]?.[c.key] ? "checked" : "";
-        return `<label><input type="checkbox" data-stage="${stage.key}" data-item="${c.key}" ${checked} /> ${escapeHtml(c.label)}</label>`;
+        const hint = c.optional
+          ? '<span class="stage-hint">(optional)</span>'
+          : itemSkipped
+          ? '<span class="stage-hint">(not applicable)</span>'
+          : "";
+        return `<label class="${itemSkipped ? "stage-item-skipped" : ""}"><input type="checkbox" data-stage="${stage.key}" data-item="${c.key}" ${checked} /> ${escapeHtml(c.label)} ${hint}</label>`;
       })
       .join("");
 
@@ -721,10 +746,11 @@ function renderStageAccordion(job) {
       <div class="stage-header">
         <span class="stage-mark">${mark}</span>
         <span>${escapeHtml(stage.label)}</span>
-        ${stage.checklist.length ? `<span class="stage-progress">${doneCount}/${stage.checklist.length}</span>` : ""}
+        ${stageSkipped ? '<span class="stage-progress">not needed</span>' : requiredChecklist.length ? `<span class="stage-progress">${doneCount}/${requiredChecklist.length}</span>` : ""}
         <span class="stage-caret">${isOpen ? "▾" : "▸"}</span>
       </div>
-      <div class="stage-body ${isOpen ? "" : "collapsed"}">
+      <div class="stage-body ${isOpen ? "" : "collapsed"} ${stageSkipped ? "stage-body-skipped" : ""}">
+        ${stageSkipped ? '<p class="stage-hint">Not needed — customer supplying material or repairing an existing part.</p>' : ""}
         ${checklistHtml ? `<div class="stage-checklist">${checklistHtml}</div>` : ""}
         ${fieldsHtml ? `<div class="stage-fields">${fieldsHtml}</div>` : ""}
         ${actionsHtml}
