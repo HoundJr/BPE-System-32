@@ -63,7 +63,10 @@ const STAGE_DEFS = [
     key: "quoted",
     label: "Quoted",
     checklist: [{ key: "quote_sent", label: "Quote sent to customer" }],
-    fields: [{ key: "quotedPrice", label: "Quoted price", type: "number" }],
+    fields: [
+      { key: "quotedDate", label: "Quoted date", type: "date" },
+      { key: "quotedPrice", label: "Quoted price", type: "number" },
+    ],
   },
   {
     key: "won",
@@ -130,9 +133,16 @@ const STAGE_DEFS = [
     key: "invoiced",
     label: "Invoiced",
     checklist: [{ key: "invoice_sent", label: "Invoice sent" }],
-    fields: [],
+    fields: [{ key: "invoicedDate", label: "Invoiced date", type: "date" }],
   },
 ];
+
+// Stage key -> job fields to auto-stamp with today's date when advancing out
+// of that stage (only filled if not already set).
+const AUTOFILL_ON_ADVANCE = {
+  rfq: ["rfqDate", "quotedDate"],
+  shipped: ["invoicedDate"],
+};
 const STATUSES = [...STAGE_DEFS.map((s) => ({ key: s.key, label: s.label })), { key: "lost", label: "Lost" }];
 const statusLabel = (key) => STATUSES.find((s) => s.key === key)?.label || key;
 
@@ -348,6 +358,26 @@ function jobCardHtml(j) {
     </div>`;
 }
 
+function formatCurrency(n) {
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function renderCashflowSummary(weekStartIso, weekEndIso) {
+  const inWeek = (dateStr) => dateStr && dateStr >= weekStartIso && dateStr <= weekEndIso;
+  const sumByDate = (dateField) =>
+    jobs.filter((j) => inWeek(j[dateField])).reduce((total, j) => total + (Number(j.quotedPrice) || 0), 0);
+
+  const stats = [
+    ["Quoted", sumByDate("quotedDate")],
+    ["Won", sumByDate("wonDate")],
+    ["Invoiced", sumByDate("invoicedDate")],
+  ];
+
+  $("#cashflow-summary").innerHTML = stats
+    .map(([label, total]) => `<span class="cashflow-stat"><span class="cashflow-label">${label} this week</span>${formatCurrency(total)}</span>`)
+    .join("");
+}
+
 function renderBoard() {
   const weekStart = startOfWeek(new Date());
   weekStart.setDate(weekStart.getDate() + weekOffset * 7);
@@ -361,6 +391,8 @@ function renderBoard() {
   const todayIso = toISODate(new Date());
 
   $("#cal-range").textContent = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+
+  renderCashflowSummary(weekStartIso, weekEndIso);
 
   $("#cal-header").innerHTML = days
     .map((d) => {
@@ -456,6 +488,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       stageChecklists: emptyStageChecklists(),
       rfqDate: "",
       expectedCompletionDate: "",
+      quotedDate: "",
       quotedPrice: "",
       wonDate: "",
       customerPoNumber: "",
@@ -465,6 +498,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       materialPoRef: "",
       materialOrderedDate: "",
       materialReceivedDate: "",
+      invoicedDate: "",
       operations: [],
       timeLog: [],
       referenceClass: "",
@@ -656,7 +690,10 @@ function renderStageAccordion(job) {
     const nextStage = STAGE_DEFS[currentIdx + 1];
     if (!nextStage) return;
     const currentStage = STAGE_DEFS[currentIdx];
-    const extraFields = currentStage.key === "rfq" && !job.rfqDate ? { rfqDate: toISODate(new Date()) } : {};
+    const extraFields = {};
+    (AUTOFILL_ON_ADVANCE[currentStage.key] || []).forEach((fieldKey) => {
+      if (!job[fieldKey]) extraFields[fieldKey] = toISODate(new Date());
+    });
     setStatus(nextStage.key, undefined, extraFields);
   }
   $all(".stage-advance").forEach((btn) => btn.addEventListener("click", advanceFromCurrentStage));

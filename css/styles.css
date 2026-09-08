@@ -88,6 +88,25 @@ body {
 }
 .cal-range { margin-left: 0.5rem; font-size: 0.9rem; color: var(--muted); }
 
+.cashflow-summary { display: flex; gap: 0.6rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
+.cashflow-stat {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.cashflow-stat .cashflow-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
 .job-card {
   background: var(--bg);
   border: 1px solid var(--border);
