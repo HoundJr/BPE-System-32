@@ -253,7 +253,7 @@ form button, .traveler-header button {
   font-size: 0.8rem;
   color: var(--muted);
 }
-.readonly-field { padding: 0.45rem 0; font-size: 0.95rem; color: var(--text); }
+.field-hint { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 1rem; }

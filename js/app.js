@@ -302,10 +302,14 @@ function renderCustomers() {
     .join("");
 }
 
-function populateCustomerSelect() {
-  $("#job-customer").innerHTML = customers
+function customerOptionsHtml() {
+  return customers
     .map((c) => `<option value="${c.id}">${escapeHtml(c.customerNumber)} — ${escapeHtml(c.name)}</option>`)
     .join("");
+}
+
+function populateCustomerSelect() {
+  $("#job-customer").innerHTML = customerOptionsHtml();
 }
 
 $("#customer-form").addEventListener("submit", async (e) => {
@@ -359,6 +363,23 @@ const STATUS_COLORS = {
 };
 const statusColor = (key) => STATUS_COLORS[key] || "#5b8def";
 
+// The board shows how far a job has actually gotten, not what it's working
+// toward next — so it displays the last fully-completed stage, not job.status
+// itself (which is the stage currently in progress).
+function lastCompletedStageKey(status) {
+  if (status === "lost") return "lost";
+  const idx = stageIndex(status);
+  return idx > 0 ? STAGE_DEFS[idx - 1].key : null;
+}
+function lastCompletedLabel(status) {
+  const key = lastCompletedStageKey(status);
+  return key ? statusLabel(key) : "New";
+}
+function lastCompletedColor(status) {
+  const key = lastCompletedStageKey(status);
+  return key ? statusColor(key) : "#94a3b8";
+}
+
 function renderStatusLegend() {
   $("#status-legend").innerHTML = STATUSES.map(
     (s) => `<span class="legend-item"><span class="legend-swatch" style="background:${statusColor(s.key)}"></span>${escapeHtml(s.label)}</span>`
@@ -371,7 +392,7 @@ function jobCardHtml(j) {
     <div class="job-card" data-id="${j.id}">
       <div class="jc-number">${escapeHtml(j.jobNumber)}</div>
       <div class="jc-desc">${escapeHtml(custName)} — ${escapeHtml(j.description || "")}</div>
-      <div class="jc-due">${escapeHtml(statusLabel(j.status))}</div>
+      <div class="jc-due">${escapeHtml(lastCompletedLabel(j.status))}</div>
     </div>`;
 }
 
@@ -462,10 +483,10 @@ function renderBoard() {
       const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
       const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
       const custName = customersById[job.customerId]?.name || "?";
-      const title = `${job.jobNumber} — ${custName} — ${job.description || ""} (${statusLabel(job.status)})`;
+      const title = `${job.jobNumber} — ${custName} — ${job.description || ""} — last completed: ${lastCompletedLabel(job.status)}, currently: ${statusLabel(job.status)}`;
       return `<div class="cal-bar" data-id="${job.id}"
-        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1}; background:${statusColor(job.status)};" title="${escapeHtml(title)}">
-        <span class="cal-bar-status">${escapeHtml(statusLabel(job.status))}</span>
+        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1}; background:${lastCompletedColor(job.status)};" title="${escapeHtml(title)}">
+        <span class="cal-bar-status">${escapeHtml(lastCompletedLabel(job.status))}</span>
         <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)} — ${escapeHtml(job.description || "")}</span>
       </div>`;
     })
@@ -483,6 +504,17 @@ function renderBoard() {
 
 // ---------- New job ----------
 
+// Computes the next job-number sequence for a customer by checking existing
+// jobs; shared between creating a new job and reassigning an existing one.
+async function nextJobNumberFields(customerId) {
+  const customer = customersById[customerId];
+  const existing = await getDocs(query(collection(db, "jobs"), where("customerId", "==", customerId)));
+  const maxSeq = existing.docs.reduce((max, d) => Math.max(max, d.data().sequenceForCustomer || 0), 0);
+  const sequenceForCustomer = maxSeq + 1;
+  const jobNumber = `${customer.customerNumber}-${String(sequenceForCustomer).padStart(3, "0")}`;
+  return { customerNumber: customer.customerNumber, sequenceForCustomer, jobNumber };
+}
+
 $("#new-job-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const customerId = $("#job-customer").value;
@@ -490,15 +522,12 @@ $("#new-job-form").addEventListener("submit", async (e) => {
   if (!customer) return;
 
   try {
-    const existing = await getDocs(query(collection(db, "jobs"), where("customerId", "==", customerId)));
-    const maxSeq = existing.docs.reduce((max, d) => Math.max(max, d.data().sequenceForCustomer || 0), 0);
-    const sequenceForCustomer = maxSeq + 1;
-    const jobNumber = `${customer.customerNumber}-${String(sequenceForCustomer).padStart(3, "0")}`;
+    const { customerNumber, sequenceForCustomer, jobNumber } = await nextJobNumberFields(customerId);
 
     const docRef = await addDoc(collection(db, "jobs"), {
       jobNumber,
       customerId,
-      customerNumber: customer.customerNumber,
+      customerNumber,
       sequenceForCustomer,
       description: $("#job-description").value.trim(),
       partNumber: $("#job-part-number").value.trim(),
@@ -556,9 +585,8 @@ function renderJobDetail(job) {
   currentJobData = job;
   $("#jd-job-number").textContent = job.jobNumber;
   $("#jd-status-badge").textContent = statusLabel(job.status);
-  $("#jd-customer-name").textContent = customersById[job.customerId]
-    ? `${customersById[job.customerId].customerNumber} — ${customersById[job.customerId].name}`
-    : "";
+  $("#jd-customer-select").innerHTML = customerOptionsHtml();
+  $("#jd-customer-select").value = job.customerId;
 
   $("#jd-description").value = job.description || "";
   $("#jd-part-number").value = job.partNumber || "";
@@ -589,6 +617,23 @@ $("#jd-start-date").addEventListener("change", (e) => saveField("startDate", e.t
 $("#jd-due-date").addEventListener("change", (e) => saveField("dueDate", e.target.value));
 $("#jd-reference-class").addEventListener("change", (e) => saveField("referenceClass", e.target.value));
 $("#jd-notes").addEventListener("change", (e) => saveField("notes", e.target.value));
+
+$("#jd-customer-select").addEventListener("change", async (e) => {
+  const newCustomerId = e.target.value;
+  if (!newCustomerId || newCustomerId === currentJobData?.customerId) return;
+  try {
+    const { customerNumber, sequenceForCustomer, jobNumber } = await nextJobNumberFields(newCustomerId);
+    await updateDoc(jobRef(), {
+      customerId: newCustomerId,
+      customerNumber,
+      sequenceForCustomer,
+      jobNumber,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    showError(err);
+  }
+});
 
 // ---------- Stage accordion ----------
 

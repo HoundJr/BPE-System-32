@@ -98,7 +98,10 @@
         </div>
 
         <div class="grid-2">
-          <label>Customer <span id="jd-customer-name" class="readonly-field"></span></label>
+          <label>Customer
+            <select id="jd-customer-select"></select>
+            <span class="field-hint">Changing this reassigns the job number to the new customer's next number</span>
+          </label>
           <label>Description <input type="text" id="jd-description" /></label>
           <label>Part number <input type="text" id="jd-part-number" /></label>
           <label>Quantity <input type="number" id="jd-qty" min="1" /></label>
