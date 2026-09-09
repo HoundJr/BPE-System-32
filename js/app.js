@@ -689,6 +689,70 @@ function renderJobDetail(job) {
   renderStageAccordion(job);
   renderOperations(job.operations || []);
   renderTimeLog(job.timeLog || []);
+  renderPrintTraveler(job);
+}
+
+// ---------- Printed traveler ----------
+// A purpose-built shop-floor sheet: job identification, what reference/
+// material/tooling exists, and the work sequence -- no pricing, dates, or
+// process checklists. Kept separate from the on-screen editor so print
+// output doesn't depend on what's expanded/collapsed there.
+
+function referenceSummary(job) {
+  const ref = job.stageChecklists?.rfq?.reference || {};
+  const labels = { drawing: "Drawing", model_3d: "3D model", sample_part: "Sample part", none: "None" };
+  const provided = Object.keys(labels).filter((k) => k !== "none" && ref[k]);
+  if (ref.none) return "No reference provided";
+  return provided.length ? `${provided.map((k) => labels[k]).join(", ")} provided` : "Not recorded";
+}
+
+function materialSummary(job) {
+  const src = job.stageChecklists?.rfq?.material_source || {};
+  if (src.customer_supplied) return "Customer supplied";
+  if (src.repair_existing) return "Repair existing part — no new material";
+  const parts = [job.materialSpec, job.materialSize].filter(Boolean).join(" ");
+  const supplier = job.materialSupplier ? ` — supplier: ${job.materialSupplier}` : "";
+  return parts || supplier ? `${parts}${supplier}` : "Not recorded";
+}
+
+function renderPrintTraveler(job) {
+  const custName = customersById[job.customerId]?.name || "";
+  const toolingRequired = !!job.stageChecklists?.rfq?.tooling?.special_tooling_required;
+
+  const opsRows = (job.operations || [])
+    .map(
+      (op, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(op.name)}</td>
+        <td>${escapeHtml(op.notes || "")}</td>
+        <td class="pt-col-sign"></td>
+        <td class="pt-col-sign"></td>
+      </tr>`
+    )
+    .join("");
+
+  $("#print-traveler").innerHTML = `
+    <div class="pt-header">
+      <h1>${escapeHtml(job.jobNumber)}</h1>
+      <span class="pt-customer">${escapeHtml(custName)}</span>
+    </div>
+    <table class="pt-info-table">
+      <tr><td class="pt-label">Description</td><td>${escapeHtml(job.description || "")}</td><td class="pt-label">Qty</td><td>${escapeHtml(job.qty || "")}</td></tr>
+      <tr><td class="pt-label">Part #</td><td>${escapeHtml(job.partNumber || "")}</td><td class="pt-label">Due date</td><td>${escapeHtml(job.dueDate || "")}</td></tr>
+    </table>
+    <div class="pt-facts">
+      <div><strong>Reference:</strong> ${escapeHtml(referenceSummary(job))}</div>
+      <div><strong>Material:</strong> ${escapeHtml(materialSummary(job))}</div>
+      ${toolingRequired ? `<div><strong>Special tooling:</strong> ${escapeHtml(job.specialToolingDescription || "Not yet described")}</div>` : ""}
+    </div>
+    <table class="pt-ops-table">
+      <thead><tr><th>#</th><th>Operation</th><th>Notes</th><th class="pt-col-sign">Initials</th><th class="pt-col-sign">Date</th></tr></thead>
+      <tbody>${opsRows || `<tr><td colspan="5">No operations listed</td></tr>`}</tbody>
+    </table>
+    <span class="pt-notes-label">Notes</span>
+    <div class="pt-notes-box">${escapeHtml(job.notes || "")}</div>
+  `;
 }
 
 function jobRef() {

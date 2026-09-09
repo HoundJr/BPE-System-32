@@ -396,11 +396,36 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 0.4rem; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
 
+.print-traveler { display: none; color: #000; }
+.pt-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 0.5rem; margin-bottom: 0.75rem; }
+.pt-header h1 { margin: 0; font-size: 1.6rem; }
+.pt-header .pt-customer { font-size: 1.15rem; font-weight: 600; }
+.pt-info-table { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; font-size: 0.95rem; }
+.pt-info-table td { padding: 0.3rem 0.6rem; border: 1px solid #999; }
+.pt-info-table td.pt-label { font-weight: 600; width: 12%; background: #f0f0f0; white-space: nowrap; }
+.pt-facts { margin-bottom: 0.9rem; font-size: 0.95rem; }
+.pt-facts div { margin-bottom: 0.3rem; }
+.pt-ops-table { width: 100%; border-collapse: collapse; margin-bottom: 0.9rem; font-size: 0.9rem; }
+.pt-ops-table th, .pt-ops-table td { border: 1px solid #999; padding: 0.45rem 0.6rem; text-align: left; }
+.pt-ops-table th { background: #f0f0f0; }
+.pt-ops-table .pt-col-sign { width: 12%; }
+.pt-notes-label { font-weight: 600; display: block; margin-bottom: 0.3rem; }
+.pt-notes-box { border: 1px solid #999; padding: 0.5rem; min-height: 3.5em; font-size: 0.9rem; white-space: pre-wrap; }
+
 @media print {
   .no-print { display: none !important; }
   #app-shell, #app-main { padding: 0; }
   .traveler { border: none; box-shadow: none; }
   body { background: #fff; }
-  .stage-body.collapsed { display: block; }
-  .stage-caret { display: none; }
+
+  /* Only the purpose-built shop-floor sheet prints -- the on-screen editor
+     (admin/pricing fields, checklists, live edit forms) is hidden. */
+  #view-job-detail .traveler-title,
+  #view-job-detail .grid-2,
+  #view-job-detail #lost-control,
+  #view-job-detail #stage-accordion,
+  #view-job-detail fieldset {
+    display: none !important;
+  }
+  .print-traveler { display: block; }
 }
