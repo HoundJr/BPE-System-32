@@ -167,6 +167,22 @@ const STAGE_DEFS = [
     fields: [],
   },
   {
+    key: "actual_hours",
+    label: "Actual Hours",
+    // No manual checklist -- complete once every operation has an actual
+    // hours value recorded. This is the real data future RCF quoting draws
+    // on, so it's a genuine gate before a job can be invoiced.
+    checklist: [],
+    fields: [],
+    isComplete: (job) => (job.operations || []).every((op) => op.actualHours !== "" && op.actualHours != null),
+    progressText: (job) => {
+      const ops = job.operations || [];
+      if (!ops.length) return null;
+      const done = ops.filter((op) => op.actualHours !== "" && op.actualHours != null).length;
+      return `${done}/${ops.length}`;
+    },
+  },
+  {
     key: "invoiced",
     label: "Invoiced",
     checklist: [{ key: "invoice_sent", label: "Invoice sent" }],
@@ -178,7 +194,7 @@ const STAGE_DEFS = [
 // of that stage (only filled if not already set).
 const AUTOFILL_ON_ADVANCE = {
   rfq: ["rfqDate", "quotedDate"],
-  shipped: ["invoicedDate"],
+  actual_hours: ["invoicedDate"],
 };
 const STATUSES = [...STAGE_DEFS.map((s) => ({ key: s.key, label: s.label })), { key: "lost", label: "Lost" }];
 const statusLabel = (key) => STATUSES.find((s) => s.key === key)?.label || key;
@@ -226,6 +242,7 @@ function isStageComplete(job, stageKey) {
   const stage = STAGE_DEFS.find((s) => s.key === stageKey);
   if (!stage) return true;
   if (stage.skipIf && stage.skipIf(job)) return true;
+  if (stage.isComplete) return stage.isComplete(job);
   const checklistOk = stage.checklist.every((c) => isChecklistEntrySatisfied(job, stageKey, c));
   const fieldsOk = stage.fields.every((f) => !f.required || job[f.key]);
   return checklistOk && fieldsOk;
@@ -687,7 +704,6 @@ function renderJobDetail(job) {
   renderLostControl(job);
   renderStageAccordion(job);
   renderOperations(job.operations || []);
-  renderActualHours(job.operations || []);
   renderTimeLog(job.timeLog || []);
   renderPrintTraveler(job);
 }
@@ -885,6 +901,7 @@ function renderStageAccordion(job) {
       .join("");
 
     const materialItemsHtml = stage.key === "material_ordered" ? renderMaterialItemsHtml(job) : "";
+    const actualHoursHtml = stage.key === "actual_hours" ? renderActualHoursStageHtml(job) : "";
 
     const fieldsHtml = stage.fields
       .map((f) => {
@@ -915,13 +932,24 @@ function renderStageAccordion(job) {
       <div class="stage-header">
         <span class="stage-mark">${mark}</span>
         <span>${escapeHtml(stage.label)}</span>
-        ${stageSkipped ? '<span class="stage-progress">not needed</span>' : requiredChecklist.length ? `<span class="stage-progress">${doneCount}/${requiredChecklist.length}</span>` : ""}
+        ${
+          stageSkipped
+            ? '<span class="stage-progress">not needed</span>'
+            : stage.progressText
+            ? stage.progressText(job)
+              ? `<span class="stage-progress">${stage.progressText(job)}</span>`
+              : ""
+            : requiredChecklist.length
+            ? `<span class="stage-progress">${doneCount}/${requiredChecklist.length}</span>`
+            : ""
+        }
         <span class="stage-caret">${isOpen ? "▾" : "▸"}</span>
       </div>
       <div class="stage-body ${isOpen ? "" : "collapsed"} ${stageSkipped ? "stage-body-skipped" : ""}">
         ${stageSkipped ? `<p class="stage-hint">${escapeHtml(stage.skipMessage || "Not needed for this job.")}</p>` : ""}
         ${checklistHtml ? `<div class="stage-checklist">${checklistHtml}</div>` : ""}
         ${materialItemsHtml}
+        ${actualHoursHtml}
         ${fieldsHtml ? `<div class="stage-fields">${fieldsHtml}</div>` : ""}
         ${actionsHtml}
       </div>
@@ -987,6 +1015,15 @@ function renderStageAccordion(job) {
       saveField("materialItems", items);
     })
   );
+
+  $all(".actual-hours-input").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      const i = Number(e.target.closest("tr").dataset.index);
+      const ops = [...(currentJobData?.operations || [])];
+      ops[i] = { ...ops[i], actualHours: e.target.value ? Number(e.target.value) : "" };
+      saveField("operations", ops);
+    })
+  );
 }
 
 // Material Ordered's repeatable list of {qty, spec, size} line items -- e.g.
@@ -1016,6 +1053,33 @@ function renderMaterialItemsHtml(job) {
       <button type="submit">Add material</button>
     </form>
   </div>`;
+}
+
+// Actual Hours stage: one row per operation, entered once work is done --
+// this is what feeds future Reference Class Forecasting quoting.
+function renderActualHoursStageHtml(job) {
+  const ops = job.operations || [];
+  if (!ops.length) {
+    return `<p class="stage-hint">No operations on this job yet — add them in the Operations section below.</p>`;
+  }
+  const rows = ops
+    .map(
+      (op, i) => `
+      <tr data-index="${i}">
+        <td>${escapeHtml(op.name)}</td>
+        <td>${escapeHtml(op.expectedHours || "")}</td>
+        <td><input type="number" step="0.1" min="0" class="actual-hours-input" value="${escapeHtml(op.actualHours ?? "")}" /></td>
+      </tr>`
+    )
+    .join("");
+  const total = ops.reduce((sum, op) => sum + (Number(op.actualHours) || 0), 0);
+  return `
+    <table class="data-table">
+      <thead><tr><th>Operation</th><th>Expected hrs</th><th>Actual hrs</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${total ? `<p class="stage-hint">${total.toFixed(1)} hrs total</p>` : ""}
+  `;
 }
 
 // ---------- Operations ----------
@@ -1062,35 +1126,6 @@ $("#operation-form").addEventListener("submit", (e) => {
   saveField("operations", ops);
   $("#operation-form").reset();
 });
-
-// ---------- Actual hours (entered at job completion, feeds RCF) ----------
-
-function renderActualHours(operations) {
-  $("#actual-hours-tbody").innerHTML = operations.length
-    ? operations
-        .map(
-          (op, i) => `
-        <tr data-index="${i}">
-          <td>${escapeHtml(op.name)}</td>
-          <td>${op.expectedHours || ""}</td>
-          <td><input type="number" step="0.1" min="0" class="actual-hours-input" value="${escapeHtml(op.actualHours ?? "")}" /></td>
-        </tr>`
-        )
-        .join("")
-    : `<tr><td colspan="3">Add operations above first</td></tr>`;
-
-  const total = operations.reduce((sum, op) => sum + (Number(op.actualHours) || 0), 0);
-  $("#actual-hours-total").textContent = total ? `— ${total.toFixed(1)} hrs total` : "";
-
-  $all(".actual-hours-input").forEach((input) =>
-    input.addEventListener("change", (e) => {
-      const i = Number(e.target.closest("tr").dataset.index);
-      const ops = [...(currentJobData?.operations || [])];
-      ops[i] = { ...ops[i], actualHours: e.target.value ? Number(e.target.value) : "" };
-      saveField("operations", ops);
-    })
-  );
-}
 
 // ---------- Time log ----------
 
