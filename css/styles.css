@@ -241,6 +241,8 @@ form button, .traveler-header button {
 /* Job detail / traveler */
 .traveler-header { display: flex; justify-content: space-between; margin-bottom: 0.75rem; }
 .traveler-header button { border-color: var(--border); background: var(--panel); color: var(--text); }
+.traveler-header-right { display: flex; gap: 0.5rem; }
+.traveler-header button.btn-danger { border-color: var(--danger); color: var(--danger); }
 .traveler {
   background: var(--panel);
   border: 1px solid var(--border);

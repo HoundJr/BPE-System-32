@@ -4,7 +4,7 @@ import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, addDoc, updateDoc, getDocs, query, where,
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, query, where,
   onSnapshot, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -323,6 +323,18 @@ $('.nav-btn[data-view="customers"]').addEventListener("click", () => {
 
 $("#btn-back-to-board").addEventListener("click", () => showView("board"));
 $("#btn-print-job").addEventListener("click", () => window.print());
+
+$("#btn-delete-job").addEventListener("click", async () => {
+  if (!currentJobData) return;
+  const ok = window.confirm(`Delete job ${currentJobData.jobNumber}? This cannot be undone.`);
+  if (!ok) return;
+  try {
+    await deleteDoc(jobRef());
+    showView("board");
+  } catch (err) {
+    showError(err);
+  }
+});
 
 // ---------- Customers ----------
 
