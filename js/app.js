@@ -729,8 +729,6 @@ function renderPrintTraveler(job) {
         <td>${escapeHtml(op.notes || "")}</td>
         <td class="pt-col-sign">${escapeHtml(op.expectedHours || "")}</td>
         <td class="pt-col-sign"></td>
-        <td class="pt-col-sign"></td>
-        <td class="pt-col-sign"></td>
       </tr>`
     )
     .join("");
@@ -750,8 +748,8 @@ function renderPrintTraveler(job) {
       ${toolingRequired ? `<div><strong>Special tooling:</strong> ${escapeHtml(job.specialToolingDescription || "Not yet described")}</div>` : ""}
     </div>
     <table class="pt-ops-table">
-      <thead><tr><th>#</th><th>Operation</th><th>Notes</th><th class="pt-col-sign">Expected hrs</th><th class="pt-col-sign">Actual hrs</th><th class="pt-col-sign">Initials</th><th class="pt-col-sign">Date</th></tr></thead>
-      <tbody>${opsRows || `<tr><td colspan="7">No operations listed</td></tr>`}</tbody>
+      <thead><tr><th>#</th><th>Operation</th><th>Notes</th><th class="pt-col-sign">Expected hrs</th><th class="pt-col-sign">Actual hrs</th></tr></thead>
+      <tbody>${opsRows || `<tr><td colspan="5">No operations listed</td></tr>`}</tbody>
     </table>
     <span class="pt-notes-label">Notes</span>
     <div class="pt-notes-box">${escapeHtml(job.notes || "")}</div>

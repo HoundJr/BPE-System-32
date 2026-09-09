@@ -409,7 +409,7 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 0.4rem; }
 .pt-ops-table { width: 100%; border-collapse: collapse; margin-bottom: 0.9rem; font-size: 0.9rem; }
 .pt-ops-table th, .pt-ops-table td { border: 1px solid #999; padding: 0.45rem 0.6rem; text-align: left; }
 .pt-ops-table th { background: #f0f0f0; }
-.pt-ops-table .pt-col-sign { width: 9%; }
+.pt-ops-table .pt-col-sign { width: 12%; }
 .pt-notes-label { font-weight: 600; display: block; margin-bottom: 0.3rem; }
 .pt-notes-box { border: 1px solid #999; padding: 0.5rem; min-height: 3.5em; font-size: 0.9rem; white-space: pre-wrap; }
 
