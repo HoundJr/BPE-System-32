@@ -337,6 +337,13 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 0.4rem; }
 .stage-body-skipped { opacity: 0.55; }
 .stage-body-skipped .stage-hint:first-child { opacity: 1; margin: 0 0 0.6rem; font-style: italic; }
 
+.material-items { margin-bottom: 0.75rem; }
+.material-items-list { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.5rem; }
+.material-item-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; }
+.material-item-row .mi-qty { font-weight: 600; min-width: 2.5em; }
+.material-item-row .mi-size { color: var(--muted); flex: 1; }
+.material-item-row button { border: none; background: none; color: var(--danger); cursor: pointer; font-size: 0.85rem; }
+
 .stage-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 1rem; }
 
 .stage-actions { display: flex; align-items: center; gap: 1rem; margin-top: 0.9rem; }
@@ -406,6 +413,7 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 0.4rem; }
 .pt-info-table td.pt-label { font-weight: 600; width: 12%; background: #f0f0f0; white-space: nowrap; }
 .pt-facts { margin-bottom: 0.9rem; font-size: 0.95rem; }
 .pt-facts div { margin-bottom: 0.3rem; }
+.pt-material-list { margin: 0.2rem 0 0; padding-left: 1.4rem; }
 .pt-ops-table { width: 100%; border-collapse: collapse; margin-bottom: 0.9rem; font-size: 0.9rem; }
 .pt-ops-table th, .pt-ops-table td { border: 1px solid #999; padding: 0.45rem 0.6rem; text-align: left; }
 .pt-ops-table th { background: #f0f0f0; }

@@ -105,9 +105,9 @@ const STAGE_DEFS = [
     },
     skipMessage: "Not needed — customer supplying material or repairing an existing part.",
     checklist: [{ key: "material_ordered_confirmed", label: "Material ordered / confirmed in stock" }],
+    // Material items (qty/spec/size) are a repeatable list, rendered specially
+    // for this stage rather than as simple fields -- see renderStageAccordion.
     fields: [
-      { key: "materialSpec", label: "Spec", type: "text" },
-      { key: "materialSize", label: "Size / stock", type: "text" },
       { key: "materialSupplier", label: "Supplier", type: "text" },
       { key: "materialPoRef", label: "Supplier PO reference", type: "text" },
       { key: "materialOrderedDate", label: "Ordered date", type: "date" },
@@ -632,8 +632,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       quotedPrice: "",
       wonDate: "",
       customerPoNumber: "",
-      materialSpec: "",
-      materialSize: "",
+      materialItems: [],
       materialSupplier: "",
       materialPoRef: "",
       materialOrderedDate: "",
@@ -707,13 +706,19 @@ function referenceSummary(job) {
   return provided.length ? `${provided.map((k) => labels[k]).join(", ")} provided` : "Not recorded";
 }
 
-function materialSummary(job) {
+function materialFactsHtml(job) {
   const src = job.stageChecklists?.rfq?.material_source || {};
-  if (src.customer_supplied) return "Customer supplied";
-  if (src.repair_existing) return "Repair existing part — no new material";
-  const parts = [job.materialSpec, job.materialSize].filter(Boolean).join(" ");
-  const supplier = job.materialSupplier ? ` — supplier: ${job.materialSupplier}` : "";
-  return parts || supplier ? `${parts}${supplier}` : "Not recorded";
+  if (src.customer_supplied) return `<div><strong>Material:</strong> Customer supplied</div>`;
+  if (src.repair_existing) return `<div><strong>Material:</strong> Repair existing part — no new material</div>`;
+
+  const items = job.materialItems || [];
+  if (!items.length) return `<div><strong>Material:</strong> Not recorded</div>`;
+
+  const itemLines = items
+    .map((m) => `<li>${escapeHtml([m.qty ? `${m.qty} x` : "", m.spec, m.size].filter(Boolean).join(" "))}</li>`)
+    .join("");
+  const supplier = job.materialSupplier ? ` (Supplier: ${escapeHtml(job.materialSupplier)})` : "";
+  return `<div><strong>Material:</strong>${supplier}<ul class="pt-material-list">${itemLines}</ul></div>`;
 }
 
 function renderPrintTraveler(job) {
@@ -744,7 +749,7 @@ function renderPrintTraveler(job) {
     </table>
     <div class="pt-facts">
       <div><strong>Reference:</strong> ${escapeHtml(referenceSummary(job))}</div>
-      <div><strong>Material:</strong> ${escapeHtml(materialSummary(job))}</div>
+      ${materialFactsHtml(job)}
       ${toolingRequired ? `<div><strong>Special tooling:</strong> ${escapeHtml(job.specialToolingDescription || "Not yet described")}</div>` : ""}
     </div>
     <table class="pt-ops-table">
@@ -879,6 +884,8 @@ function renderStageAccordion(job) {
       })
       .join("");
 
+    const materialItemsHtml = stage.key === "material_ordered" ? renderMaterialItemsHtml(job) : "";
+
     const fieldsHtml = stage.fields
       .map((f) => {
         const value = job[f.key] ?? "";
@@ -914,6 +921,7 @@ function renderStageAccordion(job) {
       <div class="stage-body ${isOpen ? "" : "collapsed"} ${stageSkipped ? "stage-body-skipped" : ""}">
         ${stageSkipped ? `<p class="stage-hint">${escapeHtml(stage.skipMessage || "Not needed for this job.")}</p>` : ""}
         ${checklistHtml ? `<div class="stage-checklist">${checklistHtml}</div>` : ""}
+        ${materialItemsHtml}
         ${fieldsHtml ? `<div class="stage-fields">${fieldsHtml}</div>` : ""}
         ${actionsHtml}
       </div>
@@ -959,6 +967,55 @@ function renderStageAccordion(job) {
       setStatus(key);
     })
   );
+
+  $all(".material-item-form").forEach((form) =>
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const qty = form.querySelector(".mi-input-qty").value;
+      const spec = form.querySelector(".mi-input-spec").value.trim();
+      const size = form.querySelector(".mi-input-size").value.trim();
+      if (!spec && !size) return;
+      const items = [...(currentJobData?.materialItems || []), { qty: qty ? Number(qty) : "", spec, size }];
+      saveField("materialItems", items);
+    })
+  );
+  $all(".material-item-delete").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      const i = Number(e.target.closest(".material-item-row").dataset.index);
+      const items = [...(currentJobData?.materialItems || [])];
+      items.splice(i, 1);
+      saveField("materialItems", items);
+    })
+  );
+}
+
+// Material Ordered's repeatable list of {qty, spec, size} line items -- e.g.
+// "2 x 4140, 35mm dia x 150mm long round bar" -- rendered inline in that
+// stage rather than as simple single-value fields.
+function renderMaterialItemsHtml(job) {
+  const items = job.materialItems || [];
+  const rows = items
+    .map(
+      (m, i) => `
+      <div class="material-item-row" data-index="${i}">
+        <span class="mi-qty">${escapeHtml(m.qty ? `${m.qty} x` : "")}</span>
+        <span class="mi-spec">${escapeHtml(m.spec || "")}</span>
+        <span class="mi-size">${escapeHtml(m.size || "")}</span>
+        <button type="button" class="material-item-delete no-print">Remove</button>
+      </div>`
+    )
+    .join("");
+
+  return `<div class="material-items">
+    <div class="stage-checklist-group-label">Material needed</div>
+    <div class="material-items-list">${rows || '<p class="stage-hint">No material items added yet.</p>'}</div>
+    <form class="inline-form material-item-form no-print">
+      <input type="number" min="1" step="1" class="mi-input-qty" placeholder="Qty" style="width:5em" />
+      <input type="text" class="mi-input-spec" placeholder="Material (e.g. 4140)" />
+      <input type="text" class="mi-input-size" placeholder="Size / description (e.g. 35mm dia x 150mm long round bar)" />
+      <button type="submit">Add material</button>
+    </form>
+  </div>`;
 }
 
 // ---------- Operations ----------
