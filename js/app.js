@@ -688,6 +688,7 @@ function renderJobDetail(job) {
   renderLostControl(job);
   renderStageAccordion(job);
   renderOperations(job.operations || []);
+  renderActualHours(job.operations || []);
   renderTimeLog(job.timeLog || []);
   renderPrintTraveler(job);
 }
@@ -726,6 +727,8 @@ function renderPrintTraveler(job) {
         <td>${i + 1}</td>
         <td>${escapeHtml(op.name)}</td>
         <td>${escapeHtml(op.notes || "")}</td>
+        <td class="pt-col-sign">${escapeHtml(op.expectedHours || "")}</td>
+        <td class="pt-col-sign"></td>
         <td class="pt-col-sign"></td>
         <td class="pt-col-sign"></td>
       </tr>`
@@ -747,8 +750,8 @@ function renderPrintTraveler(job) {
       ${toolingRequired ? `<div><strong>Special tooling:</strong> ${escapeHtml(job.specialToolingDescription || "Not yet described")}</div>` : ""}
     </div>
     <table class="pt-ops-table">
-      <thead><tr><th>#</th><th>Operation</th><th>Notes</th><th class="pt-col-sign">Initials</th><th class="pt-col-sign">Date</th></tr></thead>
-      <tbody>${opsRows || `<tr><td colspan="5">No operations listed</td></tr>`}</tbody>
+      <thead><tr><th>#</th><th>Operation</th><th>Notes</th><th class="pt-col-sign">Expected hrs</th><th class="pt-col-sign">Actual hrs</th><th class="pt-col-sign">Initials</th><th class="pt-col-sign">Date</th></tr></thead>
+      <tbody>${opsRows || `<tr><td colspan="7">No operations listed</td></tr>`}</tbody>
     </table>
     <span class="pt-notes-label">Notes</span>
     <div class="pt-notes-box">${escapeHtml(job.notes || "")}</div>
@@ -970,6 +973,7 @@ function renderOperations(operations) {
         <input type="checkbox" class="op-done" ${op.done ? "checked" : ""} />
         <span class="op-name">${escapeHtml(op.name)}</span>
         <span class="op-notes">${escapeHtml(op.notes || "")}</span>
+        <span class="op-expected-hours">${op.expectedHours ? `${op.expectedHours} hrs (est.)` : ""}</span>
         <button type="button" class="op-delete no-print">Remove</button>
       </div>`
     )
@@ -997,11 +1001,41 @@ $("#operation-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const name = $("#op-name").value.trim();
   const notes = $("#op-notes").value.trim();
+  const expectedHours = $("#op-expected-hours").value ? Number($("#op-expected-hours").value) : "";
   if (!name) return;
-  const ops = [...(currentJobData?.operations || []), { name, notes, done: false }];
+  const ops = [...(currentJobData?.operations || []), { name, notes, done: false, expectedHours, actualHours: "" }];
   saveField("operations", ops);
   $("#operation-form").reset();
 });
+
+// ---------- Actual hours (entered at job completion, feeds RCF) ----------
+
+function renderActualHours(operations) {
+  $("#actual-hours-tbody").innerHTML = operations.length
+    ? operations
+        .map(
+          (op, i) => `
+        <tr data-index="${i}">
+          <td>${escapeHtml(op.name)}</td>
+          <td>${op.expectedHours || ""}</td>
+          <td><input type="number" step="0.1" min="0" class="actual-hours-input" value="${escapeHtml(op.actualHours ?? "")}" /></td>
+        </tr>`
+        )
+        .join("")
+    : `<tr><td colspan="3">Add operations above first</td></tr>`;
+
+  const total = operations.reduce((sum, op) => sum + (Number(op.actualHours) || 0), 0);
+  $("#actual-hours-total").textContent = total ? `— ${total.toFixed(1)} hrs total` : "";
+
+  $all(".actual-hours-input").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      const i = Number(e.target.closest("tr").dataset.index);
+      const ops = [...(currentJobData?.operations || [])];
+      ops[i] = { ...ops[i], actualHours: e.target.value ? Number(e.target.value) : "" };
+      saveField("operations", ops);
+    })
+  );
+}
 
 // ---------- Time log ----------
 
