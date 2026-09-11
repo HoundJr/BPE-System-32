@@ -210,6 +210,9 @@ function isJobPaid(job) {
 // of that stage (only filled if not already set).
 const AUTOFILL_ON_ADVANCE = {
   rfq: ["rfqDate", "quotedDate"],
+  won: ["wonDate"],
+  material_ordered: ["materialOrderedDate"],
+  material_received: ["materialReceivedDate"],
   actual_hours: ["invoicedDate"],
 };
 const STATUSES = [...STAGE_DEFS.map((s) => ({ key: s.key, label: s.label })), { key: "lost", label: "Lost" }];
@@ -487,9 +490,11 @@ function lastCompletedColor(status) {
 }
 
 function renderStatusLegend() {
-  $("#status-legend").innerHTML = STATUSES.map(
+  const statusItems = STATUSES.map(
     (s) => `<span class="legend-item"><span class="legend-swatch" style="background:${statusColor(s.key)}"></span>${escapeHtml(s.label)}</span>`
   ).join("");
+  const workshopItem = `<span class="legend-item"><span class="legend-swatch legend-swatch-workshop"></span>Scheduled workshop time</span>`;
+  $("#status-legend").innerHTML = statusItems + workshopItem;
 }
 
 function jobCardHtml(j) {
@@ -602,8 +607,24 @@ function renderBoard() {
     })
     .join("");
 
+  // Workshop (actual machine time) overlay: a thin highlight along the
+  // bottom of a job's bar, only for the days it's actually on a machine,
+  // distinct from the full quote-to-paid lifecycle the bar itself spans.
+  const workshopOverlays = overlapping
+    .filter(({ job }) => job.workshopStartDate && job.workshopEndDate)
+    .filter(({ job }) => job.workshopEndDate >= weekStartIso && job.workshopStartDate <= weekEndIso)
+    .map(({ job, row }) => {
+      const clampedStart = job.workshopStartDate < weekStartIso ? weekStartIso : job.workshopStartDate;
+      const clampedEnd = job.workshopEndDate > weekEndIso ? weekEndIso : job.workshopEndDate;
+      const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
+      const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+      const title = `Workshop time: ${job.workshopStartDate} to ${job.workshopEndDate}`;
+      return `<div class="cal-bar-workshop" style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1};" title="${escapeHtml(title)}"></div>`;
+    })
+    .join("");
+
   const grid = $("#cal-grid");
-  grid.innerHTML = colBackgrounds + bars;
+  grid.innerHTML = colBackgrounds + bars + workshopOverlays;
   grid.style.gridTemplateRows = `repeat(${Math.max(rowEnds.length, 1)}, 34px)`;
 
   $all(".cal-bar").forEach((bar) => bar.addEventListener("click", () => openJobDetail(bar.dataset.id)));
@@ -661,6 +682,8 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       qty: Number($("#job-qty").value) || 1,
       startDate: $("#job-start-date").value || "",
       dueDate: $("#job-due-date").value || "",
+      workshopStartDate: "",
+      workshopEndDate: "",
       status: "rfq",
       stageChecklists: emptyStageChecklists(),
       rfqDate: "",
@@ -722,6 +745,8 @@ function renderJobDetail(job) {
   $("#jd-qty").value = job.qty || 1;
   $("#jd-start-date").value = job.startDate || "";
   $("#jd-due-date").value = job.dueDate || "";
+  $("#jd-workshop-start").value = job.workshopStartDate || "";
+  $("#jd-workshop-end").value = job.workshopEndDate || "";
   $("#jd-reference-class").value = job.referenceClass || "";
   $("#jd-notes").value = job.notes || "";
 
@@ -814,6 +839,8 @@ $("#jd-part-number").addEventListener("change", (e) => saveField("partNumber", e
 $("#jd-qty").addEventListener("change", (e) => saveField("qty", Number(e.target.value) || 1));
 $("#jd-start-date").addEventListener("change", (e) => saveField("startDate", e.target.value));
 $("#jd-due-date").addEventListener("change", (e) => saveField("dueDate", e.target.value));
+$("#jd-workshop-start").addEventListener("change", (e) => saveField("workshopStartDate", e.target.value));
+$("#jd-workshop-end").addEventListener("change", (e) => saveField("workshopEndDate", e.target.value));
 $("#jd-reference-class").addEventListener("change", (e) => saveField("referenceClass", e.target.value));
 $("#jd-notes").addEventListener("change", (e) => saveField("notes", e.target.value));
 
