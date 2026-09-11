@@ -192,7 +192,19 @@ const STAGE_DEFS = [
       { key: "quickbooksInvoiceNumber", label: "QuickBooks invoice #", type: "text" },
     ],
   },
+  {
+    key: "paid",
+    label: "Paid",
+    checklist: [{ key: "invoice_paid", label: "Invoice paid" }],
+    fields: [],
+  },
 ];
+
+// A job is fully settled once it's reached the (last) Paid stage and that
+// stage's own checklist is complete -- used to grey it out on the board.
+function isJobPaid(job) {
+  return job.status === "paid" && isStageComplete(job, "paid");
+}
 
 // Stage key -> job fields to auto-stamp with today's date when advancing out
 // of that stage (only filled if not already set).
@@ -450,7 +462,9 @@ const STATUS_COLORS = {
   in_progress: "#f0592b",
   deburr_pack: "#ec4899",
   shipped: "#22c55e",
+  actual_hours: "#0d9488",
   invoiced: "#15803d",
+  paid: "#a16207",
   lost: "#9aa2ab",
 };
 const statusColor = (key) => STATUS_COLORS[key] || "#5b8def";
@@ -480,11 +494,12 @@ function renderStatusLegend() {
 
 function jobCardHtml(j) {
   const custName = customersById[j.customerId]?.name || "?";
+  const paid = isJobPaid(j);
   return `
-    <div class="job-card" data-id="${j.id}">
+    <div class="job-card ${paid ? "paid" : ""}" data-id="${j.id}">
       <div class="jc-number">${escapeHtml(j.jobNumber)}</div>
       <div class="jc-desc">${escapeHtml(custName)} — ${escapeHtml(j.description || "")}</div>
-      <div class="jc-due">${escapeHtml(lastCompletedLabel(j.status))}</div>
+      <div class="jc-due">${paid ? "Paid" : escapeHtml(lastCompletedLabel(j.status))}</div>
     </div>`;
 }
 
@@ -575,10 +590,13 @@ function renderBoard() {
       const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
       const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
       const custName = customersById[job.customerId]?.name || "?";
+      const paid = isJobPaid(job);
+      const barLabel = paid ? "Paid" : lastCompletedLabel(job.status);
+      const barColor = paid ? "#9aa2ab" : lastCompletedColor(job.status);
       const title = `${job.jobNumber} — ${custName} — ${job.description || ""} — last completed: ${lastCompletedLabel(job.status)}, currently: ${statusLabel(job.status)}`;
-      return `<div class="cal-bar" data-id="${job.id}"
-        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1}; background:${lastCompletedColor(job.status)};" title="${escapeHtml(title)}">
-        <span class="cal-bar-status">${escapeHtml(lastCompletedLabel(job.status))}</span>
+      return `<div class="cal-bar ${paid ? "paid" : ""}" data-id="${job.id}"
+        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1}; background:${barColor};" title="${escapeHtml(title)}">
+        <span class="cal-bar-status">${escapeHtml(barLabel)}</span>
         <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)} — ${escapeHtml(job.description || "")}</span>
       </div>`;
     })

@@ -119,6 +119,7 @@ body {
 .job-card .jc-number { font-weight: 700; }
 .job-card .jc-desc { color: var(--muted); margin-top: 0.15rem; }
 .job-card .jc-due { color: var(--muted); font-size: 0.78rem; margin-top: 0.25rem; }
+.job-card.paid { opacity: 0.55; border: 2px solid #4b5563; }
 
 .unscheduled-tray { margin-bottom: 1rem; }
 .unscheduled-tray h4 {
@@ -187,6 +188,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
+.cal-bar.paid { opacity: 0.55; border: 2px solid #4b5563; }
 .status-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin-bottom: 0.9rem; }
 .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); }
 .legend-swatch { width: 0.75rem; height: 0.75rem; border-radius: 3px; flex-shrink: 0; }
