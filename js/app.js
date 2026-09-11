@@ -607,12 +607,36 @@ function renderBoard() {
     ? `<h4>Unscheduled (${unscheduled.length})</h4><div class="unscheduled-list">${unscheduled.map(jobCardHtml).join("")}</div>`
     : "";
 
-  // jobs whose start-to-due span overlaps the visible week
-  const overlapping = jobs
-    .filter((j) => j.dueDate)
-    .map((j) => ({ job: j, start: j.startDate || j.dueDate, end: j.dueDate }))
-    .filter(({ start, end }) => end >= weekStartIso && start <= weekEndIso)
-    .sort((a, b) => a.start.localeCompare(b.start));
+  // A job's row needs to account for whichever of its lifecycle span (due
+  // date) or workshop schedule is present -- a job can have workshop hours
+  // booked before a due date is even set, and still needs a row so its
+  // workshop stripe has somewhere to render.
+  const workshopSegmentsAll = computeWorkshopSegments(jobs);
+  const workshopRangeByJobId = {};
+  workshopSegmentsAll.forEach((seg) => {
+    const r = workshopRangeByJobId[seg.job.id];
+    if (!r) workshopRangeByJobId[seg.job.id] = { start: seg.dateIso, end: seg.dateIso };
+    else {
+      if (seg.dateIso < r.start) r.start = seg.dateIso;
+      if (seg.dateIso > r.end) r.end = seg.dateIso;
+    }
+  });
+
+  const overlapping = [];
+  jobs.forEach((job) => {
+    const lifecycle = job.dueDate ? { start: job.startDate || job.dueDate, end: job.dueDate } : null;
+    const workshop = workshopRangeByJobId[job.id] || null;
+    if (!lifecycle && !workshop) return;
+    let start = lifecycle ? lifecycle.start : workshop.start;
+    let end = lifecycle ? lifecycle.end : workshop.end;
+    if (workshop) {
+      if (workshop.start < start) start = workshop.start;
+      if (workshop.end > end) end = workshop.end;
+    }
+    if (end < weekStartIso || start > weekEndIso) return;
+    overlapping.push({ job, start, end, hasLifecycle: !!lifecycle });
+  });
+  overlapping.sort((a, b) => a.start.localeCompare(b.start));
 
   // greedy row-packing so overlapping-date jobs don't share a row
   const rowEnds = [];
@@ -633,6 +657,7 @@ function renderBoard() {
     .join("");
 
   const bars = overlapping
+    .filter((item) => item.hasLifecycle)
     .map(({ job, start, end, row }) => {
       const clampedStart = start < weekStartIso ? weekStartIso : start;
       const clampedEnd = end > weekEndIso ? weekEndIso : end;
@@ -651,6 +676,25 @@ function renderBoard() {
     })
     .join("");
 
+  // Jobs with workshop hours booked but no due date yet still need a
+  // labeled placeholder in their row, since they have no lifecycle bar.
+  const ghostBars = overlapping
+    .filter((item) => !item.hasLifecycle)
+    .map(({ job, start, end, row }) => {
+      const clampedStart = start < weekStartIso ? weekStartIso : start;
+      const clampedEnd = end > weekEndIso ? weekEndIso : end;
+      const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
+      const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+      const custName = customersById[job.customerId]?.name || "?";
+      const title = `${job.jobNumber} — ${custName} — ${job.description || ""} — workshop time scheduled, no due date set yet`;
+      return `<div class="cal-bar cal-bar-ghost" data-id="${job.id}"
+        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1};" title="${escapeHtml(title)}">
+        <span class="cal-bar-status">No due date</span>
+        <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)}</span>
+      </div>`;
+    })
+    .join("");
+
   // Workshop (actual machine time) overlay: a fractional-width block along
   // the bottom of a job's bar, sized by hours against an assumed 8hr day.
   // Multiple jobs starting the same day are packed side by side within it.
@@ -659,7 +703,7 @@ function renderBoard() {
     rowByJobId[job.id] = row;
   });
 
-  const workshopOverlays = computeWorkshopSegments(jobs)
+  const workshopOverlays = workshopSegmentsAll
     .filter((seg) => seg.dateIso >= weekStartIso && seg.dateIso <= weekEndIso && rowByJobId[seg.job.id] !== undefined)
     .map((seg) => {
       const dayIdx = days.findIndex((d) => toISODate(d) === seg.dateIso);
@@ -677,7 +721,7 @@ function renderBoard() {
     .join("");
 
   const grid = $("#cal-grid");
-  grid.innerHTML = colBackgrounds + bars + workshopOverlays;
+  grid.innerHTML = colBackgrounds + bars + ghostBars + workshopOverlays;
   grid.style.gridTemplateRows = `repeat(${Math.max(rowEnds.length, 1)}, 34px)`;
 
   $all(".cal-bar").forEach((bar) => bar.addEventListener("click", () => openJobDetail(bar.dataset.id)));
