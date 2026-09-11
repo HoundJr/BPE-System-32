@@ -193,7 +193,7 @@ body {
 .cal-bar-workshop {
   align-self: end;
   height: 6px;
-  margin: 0 4px 2px;
+  margin-bottom: 2px;
   border-radius: 2px;
   background: #111827;
   position: relative;

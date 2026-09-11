@@ -120,9 +120,11 @@
           <label>Due date <input type="date" id="jd-due-date" /></label>
           <label>Workshop start
             <input type="date" id="jd-workshop-start" />
-            <span class="field-hint">Actual machine time, shown as a highlight on the board</span>
+            <span class="field-hint">Actual machine time, shown proportionally on the board (assumes an 8hr day)</span>
           </label>
-          <label>Workshop end <input type="date" id="jd-workshop-end" /></label>
+          <label>Workshop hours
+            <input type="number" step="0.1" min="0" id="jd-workshop-hours" placeholder="e.g. 1.5, or 24 for 3 full days" />
+          </label>
           <label>Reference class <input type="text" id="jd-reference-class" placeholder="e.g. simple lathe work, stainless" /></label>
         </div>
 

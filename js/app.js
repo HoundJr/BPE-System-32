@@ -455,6 +455,48 @@ function startOfWeek(d) {
   return date;
 }
 
+function parseISODate(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+const WORKSHOP_DAY_HOURS = 8;
+
+// Greedily packs every job's workshop hours into consecutive days starting
+// from its workshopStartDate, filling each day to WORKSHOP_DAY_HOURS before
+// spilling into the next -- multiple jobs starting the same day share it,
+// each claiming a slice. Ties (jobs starting the same day) are ordered by
+// job number, since there's no separate priority/sequence field.
+function computeWorkshopSegments(jobList) {
+  const scheduled = jobList
+    .filter((j) => j.workshopStartDate && Number(j.workshopHours) > 0)
+    .sort((a, b) => a.workshopStartDate.localeCompare(b.workshopStartDate) || a.jobNumber.localeCompare(b.jobNumber));
+
+  const dayUsed = {}; // dateIso -> hours already claimed
+  const segments = []; // { job, dateIso, offsetHours, hours }
+
+  scheduled.forEach((job) => {
+    let remaining = Number(job.workshopHours);
+    const cursor = parseISODate(job.workshopStartDate);
+    let guard = 0;
+    while (remaining > 0 && guard < 400) {
+      guard += 1;
+      const dateIso = toISODate(cursor);
+      const used = dayUsed[dateIso] || 0;
+      const capacity = WORKSHOP_DAY_HOURS - used;
+      if (capacity > 0) {
+        const hours = Math.min(remaining, capacity);
+        segments.push({ job, dateIso, offsetHours: used, hours });
+        dayUsed[dateIso] = used + hours;
+        remaining -= hours;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  });
+
+  return segments;
+}
+
 const STATUS_COLORS = {
   rfq: "#64748b",
   quoted: "#7c6ff0",
@@ -607,19 +649,24 @@ function renderBoard() {
     })
     .join("");
 
-  // Workshop (actual machine time) overlay: a thin highlight along the
-  // bottom of a job's bar, only for the days it's actually on a machine,
-  // distinct from the full quote-to-paid lifecycle the bar itself spans.
-  const workshopOverlays = overlapping
-    .filter(({ job }) => job.workshopStartDate && job.workshopEndDate)
-    .filter(({ job }) => job.workshopEndDate >= weekStartIso && job.workshopStartDate <= weekEndIso)
-    .map(({ job, row }) => {
-      const clampedStart = job.workshopStartDate < weekStartIso ? weekStartIso : job.workshopStartDate;
-      const clampedEnd = job.workshopEndDate > weekEndIso ? weekEndIso : job.workshopEndDate;
-      const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
-      const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
-      const title = `Workshop time: ${job.workshopStartDate} to ${job.workshopEndDate}`;
-      return `<div class="cal-bar-workshop" style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1};" title="${escapeHtml(title)}"></div>`;
+  // Workshop (actual machine time) overlay: a fractional-width block along
+  // the bottom of a job's bar, sized by hours against an assumed 8hr day.
+  // Multiple jobs starting the same day are packed side by side within it.
+  const rowByJobId = {};
+  overlapping.forEach(({ job, row }) => {
+    rowByJobId[job.id] = row;
+  });
+
+  const workshopOverlays = computeWorkshopSegments(jobs)
+    .filter((seg) => seg.dateIso >= weekStartIso && seg.dateIso <= weekEndIso && rowByJobId[seg.job.id] !== undefined)
+    .map((seg) => {
+      const dayIdx = days.findIndex((d) => toISODate(d) === seg.dateIso);
+      if (dayIdx === -1) return "";
+      const row = rowByJobId[seg.job.id];
+      const leftPct = (seg.offsetHours / WORKSHOP_DAY_HOURS) * 100;
+      const widthPct = (seg.hours / WORKSHOP_DAY_HOURS) * 100;
+      const title = `${seg.job.jobNumber} — ${seg.hours}h workshop time on ${seg.dateIso}`;
+      return `<div class="cal-bar-workshop" style="grid-column:${dayIdx + 1}; grid-row:${row + 1}; margin-left:calc(${leftPct}% + 4px); width:calc(${widthPct}% - 8px);" title="${escapeHtml(title)}"></div>`;
     })
     .join("");
 
@@ -683,7 +730,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       startDate: $("#job-start-date").value || "",
       dueDate: $("#job-due-date").value || "",
       workshopStartDate: "",
-      workshopEndDate: "",
+      workshopHours: "",
       status: "rfq",
       stageChecklists: emptyStageChecklists(),
       rfqDate: "",
@@ -746,7 +793,7 @@ function renderJobDetail(job) {
   $("#jd-start-date").value = job.startDate || "";
   $("#jd-due-date").value = job.dueDate || "";
   $("#jd-workshop-start").value = job.workshopStartDate || "";
-  $("#jd-workshop-end").value = job.workshopEndDate || "";
+  $("#jd-workshop-hours").value = job.workshopHours || "";
   $("#jd-reference-class").value = job.referenceClass || "";
   $("#jd-notes").value = job.notes || "";
 
@@ -840,7 +887,7 @@ $("#jd-qty").addEventListener("change", (e) => saveField("qty", Number(e.target.
 $("#jd-start-date").addEventListener("change", (e) => saveField("startDate", e.target.value));
 $("#jd-due-date").addEventListener("change", (e) => saveField("dueDate", e.target.value));
 $("#jd-workshop-start").addEventListener("change", (e) => saveField("workshopStartDate", e.target.value));
-$("#jd-workshop-end").addEventListener("change", (e) => saveField("workshopEndDate", e.target.value));
+$("#jd-workshop-hours").addEventListener("change", (e) => saveField("workshopHours", e.target.value ? Number(e.target.value) : ""));
 $("#jd-reference-class").addEventListener("change", (e) => saveField("referenceClass", e.target.value));
 $("#jd-notes").addEventListener("change", (e) => saveField("notes", e.target.value));
 
