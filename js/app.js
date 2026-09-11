@@ -462,39 +462,40 @@ function parseISODate(iso) {
 
 const WORKSHOP_DAY_HOURS = 8;
 
-// Greedily packs every job's workshop hours into consecutive days starting
-// from its workshopStartDate, filling each day to WORKSHOP_DAY_HOURS before
-// spilling into the next -- multiple jobs starting the same day share it,
-// each claiming a slice. Ties (jobs starting the same day) are ordered by
-// job number, since there's no separate priority/sequence field.
+// Each job's own day-by-day hour breakdown is anchored strictly to its own
+// workshopStartDate -- a job only spills into a second/third day because
+// its own hours exceed one day's capacity, never because another job got
+// there first. Same-day segments are then packed side by side purely for
+// display (ties broken by job number, since there's no priority field);
+// if that pushes a day's total past WORKSHOP_DAY_HOURS, the segment is
+// flagged as a conflict rather than being moved -- the user decides
+// whether that's really two jobs running at once or needs rescheduling.
 function computeWorkshopSegments(jobList) {
   const scheduled = jobList
     .filter((j) => j.workshopStartDate && Number(j.workshopHours) > 0)
     .sort((a, b) => a.workshopStartDate.localeCompare(b.workshopStartDate) || a.jobNumber.localeCompare(b.jobNumber));
 
-  const dayUsed = {}; // dateIso -> hours already claimed
-  const segments = []; // { job, dateIso, offsetHours, hours }
-
+  const perJobDaySegments = []; // { job, dateIso, hours }
   scheduled.forEach((job) => {
     let remaining = Number(job.workshopHours);
     const cursor = parseISODate(job.workshopStartDate);
     let guard = 0;
     while (remaining > 0 && guard < 400) {
       guard += 1;
-      const dateIso = toISODate(cursor);
-      const used = dayUsed[dateIso] || 0;
-      const capacity = WORKSHOP_DAY_HOURS - used;
-      if (capacity > 0) {
-        const hours = Math.min(remaining, capacity);
-        segments.push({ job, dateIso, offsetHours: used, hours });
-        dayUsed[dateIso] = used + hours;
-        remaining -= hours;
-      }
+      const hours = Math.min(remaining, WORKSHOP_DAY_HOURS);
+      perJobDaySegments.push({ job, dateIso: toISODate(cursor), hours });
+      remaining -= hours;
       cursor.setDate(cursor.getDate() + 1);
     }
   });
 
-  return segments;
+  const dayOffset = {}; // dateIso -> cumulative hours placed so far that day
+  return perJobDaySegments.map((seg) => {
+    const offsetHours = dayOffset[seg.dateIso] || 0;
+    dayOffset[seg.dateIso] = offsetHours + seg.hours;
+    const conflict = offsetHours + seg.hours > WORKSHOP_DAY_HOURS;
+    return { job: seg.job, dateIso: seg.dateIso, offsetHours, hours: seg.hours, conflict };
+  });
 }
 
 const STATUS_COLORS = {
@@ -536,7 +537,8 @@ function renderStatusLegend() {
     (s) => `<span class="legend-item"><span class="legend-swatch" style="background:${statusColor(s.key)}"></span>${escapeHtml(s.label)}</span>`
   ).join("");
   const workshopItem = `<span class="legend-item"><span class="legend-swatch legend-swatch-workshop"></span>Scheduled workshop time</span>`;
-  $("#status-legend").innerHTML = statusItems + workshopItem;
+  const conflictItem = `<span class="legend-item"><span class="legend-swatch legend-swatch-workshop legend-swatch-conflict"></span>Over capacity that day</span>`;
+  $("#status-legend").innerHTML = statusItems + workshopItem + conflictItem;
 }
 
 function jobCardHtml(j) {
@@ -663,10 +665,14 @@ function renderBoard() {
       const dayIdx = days.findIndex((d) => toISODate(d) === seg.dateIso);
       if (dayIdx === -1) return "";
       const row = rowByJobId[seg.job.id];
-      const leftPct = (seg.offsetHours / WORKSHOP_DAY_HOURS) * 100;
-      const widthPct = (seg.hours / WORKSHOP_DAY_HOURS) * 100;
-      const title = `${seg.job.jobNumber} — ${seg.hours}h workshop time on ${seg.dateIso}`;
-      return `<div class="cal-bar-workshop" style="grid-column:${dayIdx + 1}; grid-row:${row + 1}; margin-left:calc(${leftPct}% + 4px); width:calc(${widthPct}% - 8px);" title="${escapeHtml(title)}"></div>`;
+      // Clipped to stay within the day column visually even when a
+      // conflict pushes the true total past 8hrs -- the red color carries
+      // the "overbooked" signal, not the exact overflowing width.
+      const leftPct = Math.min((seg.offsetHours / WORKSHOP_DAY_HOURS) * 100, 100);
+      const rawWidthPct = (seg.hours / WORKSHOP_DAY_HOURS) * 100;
+      const widthPct = Math.max(0, Math.min(rawWidthPct, 100 - leftPct));
+      const title = `${seg.job.jobNumber} — ${seg.hours}h workshop time on ${seg.dateIso}${seg.conflict ? " — CONFLICT: exceeds available machine hours that day" : ""}`;
+      return `<div class="cal-bar-workshop ${seg.conflict ? "conflict" : ""}" style="grid-column:${dayIdx + 1}; grid-row:${row + 1}; margin-left:calc(${leftPct}% + 4px); width:calc(${widthPct}% - 8px);" title="${escapeHtml(title)}"></div>`;
     })
     .join("");
 

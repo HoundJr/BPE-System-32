@@ -200,6 +200,7 @@ body {
   z-index: 2;
   pointer-events: none;
 }
+.cal-bar-workshop.conflict { background: #dc2626; }
 .status-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin-bottom: 0.9rem; }
 .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); }
 .legend-swatch { width: 0.75rem; height: 0.75rem; border-radius: 3px; flex-shrink: 0; }
@@ -214,6 +215,7 @@ body {
   border-radius: 1px;
   background: #111827;
 }
+.legend-swatch-conflict::after { background: #dc2626; }
 
 /* Forms */
 form label, .traveler label {
