@@ -81,6 +81,7 @@ const STAGE_DEFS = [
     fields: [
       { key: "quotedDate", label: "Quoted date", type: "date" },
       { key: "quotedPrice", label: "Quoted price", type: "number" },
+      { key: "quickbooksQuoteNumber", label: "QuickBooks quote #", type: "text" },
     ],
   },
   {
@@ -186,7 +187,10 @@ const STAGE_DEFS = [
     key: "invoiced",
     label: "Invoiced",
     checklist: [{ key: "invoice_sent", label: "Invoice sent" }],
-    fields: [{ key: "invoicedDate", label: "Invoiced date", type: "date" }],
+    fields: [
+      { key: "invoicedDate", label: "Invoiced date", type: "date" },
+      { key: "quickbooksInvoiceNumber", label: "QuickBooks invoice #", type: "text" },
+    ],
   },
 ];
 
@@ -647,6 +651,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       specialToolingDescription: "",
       quotedDate: "",
       quotedPrice: "",
+      quickbooksQuoteNumber: "",
       wonDate: "",
       customerPoNumber: "",
       materialItems: [],
@@ -655,6 +660,7 @@ $("#new-job-form").addEventListener("submit", async (e) => {
       materialOrderedDate: "",
       materialReceivedDate: "",
       invoicedDate: "",
+      quickbooksInvoiceNumber: "",
       operations: [],
       timeLog: [],
       referenceClass: "",
