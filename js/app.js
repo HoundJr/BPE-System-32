@@ -372,6 +372,65 @@ $("#btn-delete-job").addEventListener("click", async () => {
   }
 });
 
+// Copies a job as a starting template for a similar one (e.g. same part
+// with a different size/qty) -- same customer, materials, operations and
+// reference info carry over; anything tied to a specific run through the
+// pipeline (status, dates, checklists, quote/PO/invoice numbers, time
+// logged) resets so the new job starts clean at RFQ.
+$("#btn-duplicate-job").addEventListener("click", async () => {
+  const src = currentJobData;
+  if (!src) return;
+  try {
+    const { sequenceForCustomer, jobNumber } = await nextJobNumberFields(src.customerId, src.customerNumber);
+    const docRef = await addDoc(collection(db, "jobs"), {
+      jobNumber,
+      customerId: src.customerId,
+      customerNumber: src.customerNumber,
+      sequenceForCustomer,
+      description: src.description || "",
+      partNumber: src.partNumber || "",
+      qty: src.qty || 1,
+      startDate: "",
+      dueDate: "",
+      workshopStartDate: "",
+      workshopHours: src.workshopHours || "",
+      status: "rfq",
+      stageChecklists: emptyStageChecklists(),
+      rfqDate: "",
+      expectedCompletionDate: "",
+      expectedHours: src.expectedHours || "",
+      specialToolingDescription: src.specialToolingDescription || "",
+      quotedDate: "",
+      quotedPrice: "",
+      quickbooksQuoteNumber: "",
+      wonDate: "",
+      customerPoNumber: "",
+      materialItems: (src.materialItems || []).map((m) => ({ ...m })),
+      materialSupplier: src.materialSupplier || "",
+      materialPoRef: "",
+      materialOrderedDate: "",
+      materialReceivedDate: "",
+      invoicedDate: "",
+      quickbooksInvoiceNumber: "",
+      operations: (src.operations || []).map((op) => ({
+        name: op.name,
+        notes: op.notes || "",
+        done: false,
+        expectedHours: op.expectedHours || "",
+        actualHours: "",
+      })),
+      timeLog: [],
+      referenceClass: src.referenceClass || "",
+      notes: src.notes || "",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    openJobDetail(docRef.id);
+  } catch (err) {
+    showError(err);
+  }
+});
+
 // ---------- Customers ----------
 
 function startListeners() {
