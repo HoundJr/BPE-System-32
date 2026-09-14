@@ -144,11 +144,18 @@ body {
 .unscheduled-list { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .unscheduled-list .job-card { min-width: 200px; }
 
-.cal-wrapper {
+.cal-weeks { display: flex; flex-direction: column; gap: 1rem; }
+.cal-week-block {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow-x: auto;
+}
+.cal-week-label {
+  padding: 0.5rem 0.75rem 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
 }
 .cal-header {
   display: grid;

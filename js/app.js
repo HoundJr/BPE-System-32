@@ -648,32 +648,18 @@ function renderCashflowSummary(weekStartIso, weekEndIso) {
 function renderBoard() {
   const weekStart = startOfWeek(new Date());
   weekStart.setDate(weekStart.getDate() + weekOffset * 7);
-  const days = Array.from({ length: viewWeeks * 7 }, (_, i) => {
+  const allDays = Array.from({ length: viewWeeks * 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
     return d;
   });
-  const weekStartIso = toISODate(days[0]);
-  const weekEndIso = toISODate(days[days.length - 1]);
+  const overallStartIso = toISODate(allDays[0]);
+  const overallEndIso = toISODate(allDays[allDays.length - 1]);
   const todayIso = toISODate(new Date());
 
-  $("#cal-range").textContent = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[days.length - 1].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  $("#cal-range").textContent = `${allDays[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${allDays[allDays.length - 1].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
 
-  renderCashflowSummary(weekStartIso, weekEndIso);
-
-  const gridColumns = `repeat(${days.length}, minmax(120px, 1fr))`;
-  $("#cal-header").style.gridTemplateColumns = gridColumns;
-  $("#cal-grid").style.gridTemplateColumns = gridColumns;
-
-  $("#cal-header").innerHTML = days
-    .map((d) => {
-      const iso = toISODate(d);
-      return `<div class="cal-day-label ${iso === todayIso ? "today" : ""}">
-        ${d.toLocaleDateString(undefined, { weekday: "short" })}
-        <span class="cal-date-num">${d.getDate()}</span>
-      </div>`;
-    })
-    .join("");
+  renderCashflowSummary(overallStartIso, overallEndIso);
 
   const unscheduled = jobs.filter((j) => !j.dueDate);
   $("#unscheduled-tray").innerHTML = unscheduled.length
@@ -683,7 +669,9 @@ function renderBoard() {
   // A job's row needs to account for whichever of its lifecycle span (due
   // date) or workshop schedule is present -- a job can have workshop hours
   // booked before a due date is even set, and still needs a row so its
-  // workshop stripe has somewhere to render.
+  // workshop stripe has somewhere to render. Row assignment happens once
+  // across the WHOLE visible range (not per week) so a job that spans
+  // multiple weeks stays in the same row/lane in every week it appears in.
   const workshopSegmentsAll = computeWorkshopSegments(jobs);
   const workshopRangeByJobId = {};
   workshopSegmentsAll.forEach((seg) => {
@@ -706,7 +694,7 @@ function renderBoard() {
       if (workshop.start < start) start = workshop.start;
       if (workshop.end > end) end = workshop.end;
     }
-    if (end < weekStartIso || start > weekEndIso) return;
+    if (end < overallStartIso || start > overallEndIso) return;
     overlapping.push({ job, start, end, hasLifecycle: !!lifecycle });
   });
   overlapping.sort((a, b) => a.start.localeCompare(b.start));
@@ -721,81 +709,110 @@ function renderBoard() {
     rowEnds[row] = item.end;
     item.row = row;
   });
+  const totalRows = Math.max(rowEnds.length, 1);
 
-  const colBackgrounds = days
-    .map((d, i) => {
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-      return `<div class="cal-col-bg ${isWeekend ? "weekend" : ""}" style="grid-column:${i + 1};grid-row:1 / -1;"></div>`;
-    })
-    .join("");
-
-  const bars = overlapping
-    .filter((item) => item.hasLifecycle)
-    .map(({ job, start, end, row }) => {
-      const clampedStart = start < weekStartIso ? weekStartIso : start;
-      const clampedEnd = end > weekEndIso ? weekEndIso : end;
-      const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
-      const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
-      const custName = customersById[job.customerId]?.name || "?";
-      const paid = isJobPaid(job);
-      const barLabel = paid ? "Paid" : lastCompletedLabel(job.status);
-      const barColor = paid ? "#9aa2ab" : lastCompletedColor(job.status);
-      const title = `${job.jobNumber} — ${custName} — ${job.description || ""} — last completed: ${lastCompletedLabel(job.status)}, currently: ${statusLabel(job.status)}`;
-      return `<div class="cal-bar ${paid ? "paid" : ""}" data-id="${job.id}"
-        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1}; background:${barColor};" title="${escapeHtml(title)}">
-        <span class="cal-bar-status">${escapeHtml(barLabel)}</span>
-        <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)} — ${escapeHtml(job.description || "")}</span>
-      </div>`;
-    })
-    .join("");
-
-  // Jobs with workshop hours booked but no due date yet still need a
-  // labeled placeholder in their row, since they have no lifecycle bar.
-  const ghostBars = overlapping
-    .filter((item) => !item.hasLifecycle)
-    .map(({ job, start, end, row }) => {
-      const clampedStart = start < weekStartIso ? weekStartIso : start;
-      const clampedEnd = end > weekEndIso ? weekEndIso : end;
-      const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
-      const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
-      const custName = customersById[job.customerId]?.name || "?";
-      const title = `${job.jobNumber} — ${custName} — ${job.description || ""} — workshop time scheduled, no due date set yet`;
-      return `<div class="cal-bar cal-bar-ghost" data-id="${job.id}"
-        style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1};" title="${escapeHtml(title)}">
-        <span class="cal-bar-status">No due date</span>
-        <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)}</span>
-      </div>`;
-    })
-    .join("");
-
-  // Workshop (actual machine time) overlay: a fractional-width block along
-  // the bottom of a job's bar, sized by hours against an assumed 8hr day.
-  // Multiple jobs starting the same day are packed side by side within it.
   const rowByJobId = {};
   overlapping.forEach(({ job, row }) => {
     rowByJobId[job.id] = row;
   });
 
-  const workshopOverlays = workshopSegmentsAll
-    .filter((seg) => seg.dateIso >= weekStartIso && seg.dateIso <= weekEndIso && rowByJobId[seg.job.id] !== undefined)
-    .map((seg) => {
-      const dayIdx = days.findIndex((d) => toISODate(d) === seg.dateIso);
-      if (dayIdx === -1) return "";
-      const row = rowByJobId[seg.job.id];
-      // Clipped to stay within the day column visually even when a
-      // conflict pushes the true total past 8hrs -- the red color carries
-      // the "overbooked" signal, not the exact overflowing width.
-      const leftPct = Math.min((seg.offsetHours / WORKSHOP_DAY_HOURS) * 100, 100);
-      const rawWidthPct = (seg.hours / WORKSHOP_DAY_HOURS) * 100;
-      const widthPct = Math.max(0, Math.min(rawWidthPct, 100 - leftPct));
-      const title = `${seg.job.jobNumber} — ${seg.hours}h workshop time on ${seg.dateIso}${seg.conflict ? " — CONFLICT: exceeds available machine hours that day" : ""}`;
-      return `<div class="cal-bar-workshop ${seg.conflict ? "conflict" : ""}" style="grid-column:${dayIdx + 1}; grid-row:${row + 1}; margin-left:calc(${leftPct}% + 4px); width:calc(${widthPct}% - 8px);" title="${escapeHtml(title)}"></div>`;
-    })
-    .join("");
+  // Render one header+grid block per week, each showing only the portion
+  // of every bar that falls within that week (clamped, same as before) --
+  // but using the row assigned above, so multi-week jobs line up vertically
+  // block to block.
+  const weekBlocksHtml = [];
+  for (let w = 0; w < viewWeeks; w++) {
+    const days = allDays.slice(w * 7, w * 7 + 7);
+    const weekStartIso = toISODate(days[0]);
+    const weekEndIso = toISODate(days[6]);
+    const blockItems = overlapping.filter((item) => item.end >= weekStartIso && item.start <= weekEndIso);
 
-  const grid = $("#cal-grid");
-  grid.innerHTML = colBackgrounds + bars + ghostBars + workshopOverlays;
-  grid.style.gridTemplateRows = `repeat(${Math.max(rowEnds.length, 1)}, 34px)`;
+    const headerHtml = days
+      .map((d) => {
+        const iso = toISODate(d);
+        return `<div class="cal-day-label ${iso === todayIso ? "today" : ""}">
+          ${d.toLocaleDateString(undefined, { weekday: "short" })}
+          <span class="cal-date-num">${d.getDate()}</span>
+        </div>`;
+      })
+      .join("");
+
+    const colBackgrounds = days
+      .map((d, i) => {
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        return `<div class="cal-col-bg ${isWeekend ? "weekend" : ""}" style="grid-column:${i + 1};grid-row:1 / -1;"></div>`;
+      })
+      .join("");
+
+    const bars = blockItems
+      .filter((item) => item.hasLifecycle)
+      .map(({ job, start, end, row }) => {
+        const clampedStart = start < weekStartIso ? weekStartIso : start;
+        const clampedEnd = end > weekEndIso ? weekEndIso : end;
+        const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
+        const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+        const custName = customersById[job.customerId]?.name || "?";
+        const paid = isJobPaid(job);
+        const barLabel = paid ? "Paid" : lastCompletedLabel(job.status);
+        const barColor = paid ? "#9aa2ab" : lastCompletedColor(job.status);
+        const title = `${job.jobNumber} — ${custName} — ${job.description || ""} — last completed: ${lastCompletedLabel(job.status)}, currently: ${statusLabel(job.status)}`;
+        return `<div class="cal-bar ${paid ? "paid" : ""}" data-id="${job.id}"
+          style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1}; background:${barColor};" title="${escapeHtml(title)}">
+          <span class="cal-bar-status">${escapeHtml(barLabel)}</span>
+          <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)} — ${escapeHtml(job.description || "")}</span>
+        </div>`;
+      })
+      .join("");
+
+    // Jobs with workshop hours booked but no due date yet still need a
+    // labeled placeholder in their row, since they have no lifecycle bar.
+    const ghostBars = blockItems
+      .filter((item) => !item.hasLifecycle)
+      .map(({ job, start, end, row }) => {
+        const clampedStart = start < weekStartIso ? weekStartIso : start;
+        const clampedEnd = end > weekEndIso ? weekEndIso : end;
+        const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
+        const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+        const custName = customersById[job.customerId]?.name || "?";
+        const title = `${job.jobNumber} — ${custName} — ${job.description || ""} — workshop time scheduled, no due date set yet`;
+        return `<div class="cal-bar cal-bar-ghost" data-id="${job.id}"
+          style="grid-column:${startCol} / ${endCol}; grid-row:${row + 1};" title="${escapeHtml(title)}">
+          <span class="cal-bar-status">No due date</span>
+          <span>${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)}</span>
+        </div>`;
+      })
+      .join("");
+
+    // Workshop (actual machine time) overlay: a fractional-width block along
+    // the bottom of a job's bar, sized by hours against an assumed 8hr day.
+    const workshopOverlays = workshopSegmentsAll
+      .filter((seg) => seg.dateIso >= weekStartIso && seg.dateIso <= weekEndIso && rowByJobId[seg.job.id] !== undefined)
+      .map((seg) => {
+        const dayIdx = days.findIndex((d) => toISODate(d) === seg.dateIso);
+        if (dayIdx === -1) return "";
+        const row = rowByJobId[seg.job.id];
+        // Clipped to stay within the day column visually even when a
+        // conflict pushes the true total past 8hrs -- the red color carries
+        // the "overbooked" signal, not the exact overflowing width.
+        const leftPct = Math.min((seg.offsetHours / WORKSHOP_DAY_HOURS) * 100, 100);
+        const rawWidthPct = (seg.hours / WORKSHOP_DAY_HOURS) * 100;
+        const widthPct = Math.max(0, Math.min(rawWidthPct, 100 - leftPct));
+        const title = `${seg.job.jobNumber} — ${seg.hours}h workshop time on ${seg.dateIso}${seg.conflict ? " — CONFLICT: exceeds available machine hours that day" : ""}`;
+        return `<div class="cal-bar-workshop ${seg.conflict ? "conflict" : ""}" style="grid-column:${dayIdx + 1}; grid-row:${row + 1}; margin-left:calc(${leftPct}% + 4px); width:calc(${widthPct}% - 8px);" title="${escapeHtml(title)}"></div>`;
+      })
+      .join("");
+
+    const weekLabel = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+
+    weekBlocksHtml.push(`
+      <div class="cal-week-block">
+        ${viewWeeks > 1 ? `<div class="cal-week-label">${escapeHtml(weekLabel)}</div>` : ""}
+        <div class="cal-header">${headerHtml}</div>
+        <div class="cal-grid" style="grid-template-rows: repeat(${totalRows}, 34px);">${colBackgrounds + bars + ghostBars + workshopOverlays}</div>
+      </div>`);
+  }
+
+  $("#cal-weeks").innerHTML = weekBlocksHtml.join("");
 
   $all(".cal-bar").forEach((bar) => bar.addEventListener("click", () => openJobDetail(bar.dataset.id)));
   $all(".unscheduled-list .job-card").forEach((card) =>
