@@ -38,10 +38,15 @@
     <!-- BOARD -->
     <section id="view-board" class="view">
       <div class="board-controls no-print">
-        <button id="cal-prev" class="nav-btn">&larr; Prev week</button>
-        <button id="cal-today" class="nav-btn">This week</button>
-        <button id="cal-next" class="nav-btn">Next week &rarr;</button>
+        <button id="cal-prev" class="nav-btn">&larr; Prev</button>
+        <button id="cal-today" class="nav-btn">Today</button>
+        <button id="cal-next" class="nav-btn">Next &rarr;</button>
         <span id="cal-range" class="cal-range"></span>
+        <div class="view-length-toggle">
+          <button class="view-length-btn active" data-weeks="1">1 Week</button>
+          <button class="view-length-btn" data-weeks="2">2 Weeks</button>
+          <button class="view-length-btn" data-weeks="4">4 Weeks</button>
+        </div>
       </div>
       <div id="cashflow-summary" class="cashflow-summary no-print"></div>
       <div id="status-legend" class="status-legend no-print"></div>

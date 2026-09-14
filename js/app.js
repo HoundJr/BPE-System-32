@@ -498,10 +498,19 @@ $("#customer-form").addEventListener("submit", async (e) => {
 // ---------- Board / calendar ----------
 
 let weekOffset = 0;
+let viewWeeks = 1; // 1, 2, or 4 -- how many weeks the board shows at once
 
-$("#cal-prev").addEventListener("click", () => { weekOffset -= 1; renderBoard(); });
-$("#cal-next").addEventListener("click", () => { weekOffset += 1; renderBoard(); });
+$("#cal-prev").addEventListener("click", () => { weekOffset -= viewWeeks; renderBoard(); });
+$("#cal-next").addEventListener("click", () => { weekOffset += viewWeeks; renderBoard(); });
 $("#cal-today").addEventListener("click", () => { weekOffset = 0; renderBoard(); });
+
+$all(".view-length-btn").forEach((btn) =>
+  btn.addEventListener("click", () => {
+    viewWeeks = Number(btn.dataset.weeks);
+    $all(".view-length-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    renderBoard();
+  })
+);
 
 function toISODate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -620,11 +629,12 @@ function renderCashflowSummary(weekStartIso, weekEndIso) {
   const sumByDate = (dateField, valueField) =>
     jobs.filter((j) => inWeek(j[dateField])).reduce((total, j) => total + (Number(j[valueField]) || 0), 0);
 
+  const period = viewWeeks > 1 ? "in view" : "this week";
   const moneyStats = [
-    ["Quoted this week", sumByDate("quotedDate", "quotedPrice")],
-    ["Won this week", sumByDate("wonDate", "quotedPrice")],
-    ["Invoiced this week", sumByDate("invoicedDate", "quotedPrice")],
-    ["Scheduled this week", sumByDate("dueDate", "quotedPrice")],
+    [`Quoted ${period}`, sumByDate("quotedDate", "quotedPrice")],
+    [`Won ${period}`, sumByDate("wonDate", "quotedPrice")],
+    [`Invoiced ${period}`, sumByDate("invoicedDate", "quotedPrice")],
+    [`Scheduled ${period}`, sumByDate("dueDate", "quotedPrice")],
   ];
   const scheduledHours = sumByDate("dueDate", "expectedHours");
 
@@ -638,18 +648,22 @@ function renderCashflowSummary(weekStartIso, weekEndIso) {
 function renderBoard() {
   const weekStart = startOfWeek(new Date());
   weekStart.setDate(weekStart.getDate() + weekOffset * 7);
-  const days = Array.from({ length: 7 }, (_, i) => {
+  const days = Array.from({ length: viewWeeks * 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
     return d;
   });
   const weekStartIso = toISODate(days[0]);
-  const weekEndIso = toISODate(days[6]);
+  const weekEndIso = toISODate(days[days.length - 1]);
   const todayIso = toISODate(new Date());
 
-  $("#cal-range").textContent = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  $("#cal-range").textContent = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[days.length - 1].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
 
   renderCashflowSummary(weekStartIso, weekEndIso);
+
+  const gridColumns = `repeat(${days.length}, minmax(120px, 1fr))`;
+  $("#cal-header").style.gridTemplateColumns = gridColumns;
+  $("#cal-grid").style.gridTemplateColumns = gridColumns;
 
   $("#cal-header").innerHTML = days
     .map((d) => {
