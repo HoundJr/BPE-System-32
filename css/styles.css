@@ -80,6 +80,31 @@ body {
 #app-main { padding: 1rem; max-width: 1400px; margin: 0 auto; }
 
 /* Board / calendar */
+.board-layout { display: flex; gap: 1rem; align-items: flex-start; }
+.board-main { flex: 1; min-width: 0; }
+
+.today-panel {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem;
+}
+.today-panel h3 { margin: 0 0 0.75rem; font-size: 0.95rem; }
+.today-job { border-bottom: 1px solid var(--border); padding: 0.5rem 0; cursor: pointer; }
+.today-job:last-child { border-bottom: none; }
+.today-job-header { font-weight: 600; font-size: 0.85rem; }
+.today-job-stage { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
+.today-task-list { margin: 0; padding-left: 1.1rem; font-size: 0.82rem; }
+.today-task-internal { color: var(--danger); }
+.today-task-external { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .board-layout { flex-direction: column; }
+  .today-panel { width: 100%; }
+}
+
 .board-controls {
   margin-bottom: 0.75rem;
   display: flex;

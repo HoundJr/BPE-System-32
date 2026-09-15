@@ -77,6 +77,8 @@ const STAGE_DEFS = [
   {
     key: "quoted",
     label: "Quoted",
+    // Once quoted, moving on is out of your hands until the customer sends a PO.
+    advanceWaitsOnExternal: true,
     checklist: [{ key: "quote_sent", label: "Quote sent to customer" }],
     fields: [
       { key: "quotedDate", label: "Quoted date", type: "date" },
@@ -105,6 +107,8 @@ const STAGE_DEFS = [
       return !!(src.customer_supplied || src.repair_existing);
     },
     skipMessage: "Not needed — customer supplying material or repairing an existing part.",
+    // Once ordered, moving on means waiting on the supplier's delivery.
+    advanceWaitsOnExternal: true,
     checklist: [{ key: "material_ordered_confirmed", label: "Material ordered / confirmed in stock" }],
     // Material items (qty/spec/size) are a repeatable list, rendered specially
     // for this stage rather than as simple fields -- see renderStageAccordion.
@@ -120,6 +124,8 @@ const STAGE_DEFS = [
     // Not needed unless the RFQ flagged special tooling as required.
     skipIf: (job) => !job.stageChecklists?.rfq?.tooling?.special_tooling_required,
     skipMessage: "Not needed — no special tooling was flagged as required in the RFQ.",
+    // Once ordered, moving on means waiting on the tooling supplier.
+    advanceWaitsOnExternal: true,
     checklist: [{ key: "tooling_ordered_confirmed", label: "Special tooling ordered / confirmed" }],
     fields: [{ key: "specialToolingDescription", label: "Special tooling needed", type: "text", readonly: true }],
   },
@@ -186,6 +192,8 @@ const STAGE_DEFS = [
   {
     key: "invoiced",
     label: "Invoiced",
+    // Once invoiced, moving on means waiting on the customer to pay.
+    advanceWaitsOnExternal: true,
     checklist: [{ key: "invoice_sent", label: "Invoice sent" }],
     fields: [
       { key: "invoicedDate", label: "Invoiced date", type: "date" },
@@ -195,7 +203,7 @@ const STAGE_DEFS = [
   {
     key: "paid",
     label: "Paid",
-    checklist: [{ key: "invoice_paid", label: "Invoice paid" }],
+    checklist: [{ key: "invoice_paid", label: "Invoice paid", external: true }],
     fields: [],
   },
 ];
@@ -445,6 +453,7 @@ function startListeners() {
       renderCustomers();
       populateCustomerSelect();
       renderBoard();
+      renderTodayPanel();
     },
     showError
   );
@@ -454,6 +463,7 @@ function startListeners() {
     (snap) => {
       jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderBoard();
+      renderTodayPanel();
     },
     showError
   );
@@ -643,6 +653,91 @@ function renderCashflowSummary(weekStartIso, weekEndIso) {
       .map(([label, total]) => `<span class="cashflow-stat"><span class="cashflow-label">${label}</span>${formatCurrency(total)}</span>`)
       .join("") +
     `<span class="cashflow-stat"><span class="cashflow-label">Scheduled hours</span>${scheduledHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs</span>`;
+}
+
+// ---------- Today panel: what needs attention right now, regardless of
+// where a job's due date falls -- unlike the calendar, this isn't date
+// filtered, it's every active job's next outstanding requirement. ----------
+
+// Unsatisfied checklist items/required fields in a job's current stage --
+// always something only the shop can do (red). A stage with nothing
+// outstanding but not yet advanced means it's genuinely done on this end.
+function stageOutstandingItems(job, stage) {
+  if (stage.skipIf && stage.skipIf(job)) return [];
+
+  if (stage.isComplete) {
+    return stage.isComplete(job) ? [] : [{ text: "Enter actual hours for all operations", external: false }];
+  }
+
+  const items = [];
+  stage.checklist.forEach((c) => {
+    if (c.optional) return;
+    if (c.skipIf && c.skipIf(job)) return;
+    if (isChecklistEntrySatisfied(job, stage.key, c)) return;
+    if (c.type === "subsection") {
+      const subState = job.stageChecklists?.[stage.key]?.[c.key] || {};
+      const missing = c.items.find((i) => !i.optional && !subState[i.key]);
+      items.push({ text: missing ? missing.label : c.label, external: !!c.external });
+      return;
+    }
+    items.push({ text: c.label, external: !!c.external });
+  });
+  stage.fields.forEach((f) => {
+    if (f.required && !job[f.key]) items.push({ text: f.label, external: false });
+  });
+  return items;
+}
+
+function computeOutstandingTasks() {
+  const results = [];
+  jobs.forEach((job) => {
+    if (job.status === "lost" || isJobPaid(job)) return;
+    const idx = Math.max(stageIndex(job.status), 0);
+    const stage = STAGE_DEFS[idx];
+    if (!stage) return;
+
+    const outstanding = stageOutstandingItems(job, stage);
+    let lines;
+    if (outstanding.length) {
+      lines = outstanding;
+    } else {
+      const nextStage = STAGE_DEFS[idx + 1];
+      if (!nextStage) return;
+      const skipped = !!(stage.skipIf && stage.skipIf(job));
+      const external = !!stage.advanceWaitsOnExternal && !skipped;
+      lines = [{ text: `Ready to advance to ${nextStage.label}`, external }];
+    }
+    results.push({ job, stageLabel: stage.label, lines });
+  });
+  results.sort((a, b) => (a.job.dueDate || "9999-99-99").localeCompare(b.job.dueDate || "9999-99-99"));
+  return results;
+}
+
+function renderTodayPanel() {
+  $("#today-date").textContent = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+
+  const tasks = computeOutstandingTasks();
+  $("#today-list").innerHTML = tasks.length
+    ? tasks
+        .map(({ job, stageLabel, lines }) => {
+          const custName = customersById[job.customerId]?.name || "?";
+          const itemsHtml = lines
+            .map((l) => `<li class="${l.external ? "today-task-external" : "today-task-internal"}">${escapeHtml(l.text)}</li>`)
+            .join("");
+          return `<div class="today-job" data-id="${job.id}">
+            <div class="today-job-header">${escapeHtml(job.jobNumber)} — ${escapeHtml(custName)}</div>
+            <div class="today-job-stage">${escapeHtml(stageLabel)}${job.dueDate ? ` · due ${escapeHtml(job.dueDate)}` : ""}</div>
+            <ul class="today-task-list">${itemsHtml}</ul>
+          </div>`;
+        })
+        .join("")
+    : `<p class="stage-hint">Nothing outstanding — everything's either done or fully paid.</p>`;
+
+  $all(".today-job").forEach((card) => card.addEventListener("click", () => openJobDetail(card.dataset.id)));
 }
 
 function renderBoard() {

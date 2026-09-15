@@ -37,21 +37,29 @@
 
     <!-- BOARD -->
     <section id="view-board" class="view">
-      <div class="board-controls no-print">
-        <button id="cal-prev" class="nav-btn">&larr; Prev</button>
-        <button id="cal-today" class="nav-btn">Today</button>
-        <button id="cal-next" class="nav-btn">Next &rarr;</button>
-        <span id="cal-range" class="cal-range"></span>
-        <div class="view-length-toggle">
-          <button class="view-length-btn active" data-weeks="1">1 Week</button>
-          <button class="view-length-btn" data-weeks="2">2 Weeks</button>
-          <button class="view-length-btn" data-weeks="4">4 Weeks</button>
+      <div class="board-layout">
+        <div class="board-main">
+          <div class="board-controls no-print">
+            <button id="cal-prev" class="nav-btn">&larr; Prev</button>
+            <button id="cal-today" class="nav-btn">Today</button>
+            <button id="cal-next" class="nav-btn">Next &rarr;</button>
+            <span id="cal-range" class="cal-range"></span>
+            <div class="view-length-toggle">
+              <button class="view-length-btn active" data-weeks="1">1 Week</button>
+              <button class="view-length-btn" data-weeks="2">2 Weeks</button>
+              <button class="view-length-btn" data-weeks="4">4 Weeks</button>
+            </div>
+          </div>
+          <div id="cashflow-summary" class="cashflow-summary no-print"></div>
+          <div id="status-legend" class="status-legend no-print"></div>
+          <div id="unscheduled-tray" class="unscheduled-tray"></div>
+          <div id="cal-weeks" class="cal-weeks"></div>
         </div>
+        <aside id="today-panel" class="today-panel no-print">
+          <h3 id="today-date">Today</h3>
+          <div id="today-list"></div>
+        </aside>
       </div>
-      <div id="cashflow-summary" class="cashflow-summary no-print"></div>
-      <div id="status-legend" class="status-legend no-print"></div>
-      <div id="unscheduled-tray" class="unscheduled-tray"></div>
-      <div id="cal-weeks" class="cal-weeks"></div>
     </section>
 
     <!-- CUSTOMERS -->
