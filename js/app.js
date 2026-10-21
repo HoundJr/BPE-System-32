@@ -476,6 +476,7 @@ function startListeners() {
     collection(db, "equipment"),
     (snap) => {
       equipment = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderBoard();
       renderMaintenanceSummary();
       renderTodayPanel();
     },
