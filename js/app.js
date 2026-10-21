@@ -561,41 +561,57 @@ function addInterval(isoDate, value, unit) {
   return date;
 }
 
+// Mirrors js/equipment.js's dueStatus() -- returns both the status and the
+// computed next-due date so the board can show dates, not just labels.
 function maintenanceDueStatus(task) {
-  if (!task.lastDone) return "never";
+  if (!task.lastDone) return { status: "never", nextDueIso: "" };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const daysUntil = Math.round((addInterval(task.lastDone, task.intervalValue, task.intervalUnit) - today) / 86400000);
-  if (daysUntil < 0) return "overdue";
-  if (daysUntil <= 7) return "due-soon";
-  return "ok";
+  const nextDue = addInterval(task.lastDone, task.intervalValue, task.intervalUnit);
+  const daysUntil = Math.round((nextDue - today) / 86400000);
+  const nextDueIso = toISODate(nextDue);
+  if (daysUntil < 0) return { status: "overdue", nextDueIso };
+  if (daysUntil <= 7) return { status: "due-soon", nextDueIso };
+  return { status: "ok", nextDueIso };
 }
 
 function maintenanceOutstanding() {
   const out = [];
   equipment.forEach((eq) => {
     (eq.tasks || []).forEach((t) => {
-      const status = maintenanceDueStatus(t);
+      const { status, nextDueIso } = maintenanceDueStatus(t);
       if (status === "overdue" || status === "due-soon" || status === "never") {
-        out.push({ equipment: eq, task: t, status });
+        out.push({ equipment: eq, task: t, status, nextDueIso });
       }
     });
   });
+  // soonest due date first; "never recorded" tasks (no date) sort last
+  out.sort((a, b) => (a.nextDueIso || "9999-99-99").localeCompare(b.nextDueIso || "9999-99-99"));
   return out;
 }
 
 function renderMaintenanceSummary() {
-  const outstanding = maintenanceOutstanding();
-  const overdue = outstanding.filter((o) => o.status === "overdue").length;
-  const dueSoon = outstanding.length - overdue;
+  const outstanding = maintenanceOutstanding(); // already sorted soonest-first
+  const overdueItems = outstanding.filter((o) => o.status === "overdue");
+  const dueSoonItems = outstanding.filter((o) => o.status === "due-soon");
   const el = $("#maintenance-summary");
   if (!outstanding.length) {
     el.innerHTML = "";
     return;
   }
   const parts = [];
-  if (overdue) parts.push(`<a href="equipment.html" class="overdue">&#128295; ${overdue} maintenance task${overdue === 1 ? "" : "s"} overdue</a>`);
-  if (dueSoon) parts.push(`<a href="equipment.html" class="due-soon">&#128295; ${dueSoon} due soon</a>`);
+  if (overdueItems.length) {
+    const soonest = overdueItems[0].nextDueIso;
+    parts.push(
+      `<a href="equipment.html" class="overdue">&#128295; ${overdueItems.length} maintenance task${overdueItems.length === 1 ? "" : "s"} overdue${soonest ? ` (since ${escapeHtml(soonest)})` : ""}</a>`
+    );
+  }
+  if (dueSoonItems.length) {
+    const soonest = dueSoonItems[0].nextDueIso;
+    parts.push(
+      `<a href="equipment.html" class="due-soon">&#128295; ${dueSoonItems.length} due soon${soonest ? ` (next: ${escapeHtml(soonest)})` : ""}</a>`
+    );
+  }
   el.innerHTML = parts.join(" ");
 }
 
@@ -793,9 +809,9 @@ function renderTodayPanel() {
     ? `<h4 class="today-section-label">Maintenance</h4>` +
       maintenance
         .map(
-          ({ equipment: eq, task, status }) => `<a href="equipment.html" class="today-job">
+          ({ equipment: eq, task, status, nextDueIso }) => `<a href="equipment.html" class="today-job">
             <div class="today-job-header">&#128295; ${escapeHtml(eq.name)}</div>
-            <div class="today-job-stage">${MAINTENANCE_STATUS_LABEL[status]}</div>
+            <div class="today-job-stage">${MAINTENANCE_STATUS_LABEL[status]}${nextDueIso ? ` · due ${escapeHtml(nextDueIso)}` : ""}</div>
             <ul class="today-task-list"><li class="today-task-internal">${escapeHtml(task.name)}</li></ul>
           </a>`
         )
