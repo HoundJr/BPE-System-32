@@ -860,14 +860,29 @@ function renderBoard() {
 
   renderCashflowSummary(overallStartIso, overallEndIso);
 
-  // Maintenance tasks due on a given calendar day -- grouped for the small
-  // per-day marker in each week block's header (not a full bar/row like
-  // workshop hours, just enough to not forget about it while scanning dates).
-  const maintenanceByDate = {};
-  maintenanceOutstanding().forEach((m) => {
-    if (!m.nextDueIso) return;
-    (maintenanceByDate[m.nextDueIso] = maintenanceByDate[m.nextDueIso] || []).push(m);
+  // Maintenance tasks rendered as their own calendar bars, below the job
+  // rows -- never-recorded tasks have no due date to anchor to, so they
+  // stay in the Today panel/summary only. Overdue tasks span from when
+  // they were due up to today (so the bar visibly grows the more overdue
+  // it gets); due-soon tasks are a single-day bar on their due date.
+  const maintenanceItems = maintenanceOutstanding()
+    .filter((m) => m.nextDueIso)
+    .map((m) => ({
+      ...m,
+      start: m.nextDueIso,
+      end: m.status === "overdue" && m.nextDueIso < todayIso ? todayIso : m.nextDueIso,
+    }))
+    .filter((m) => m.end >= overallStartIso && m.start <= overallEndIso);
+  maintenanceItems.sort((a, b) => a.start.localeCompare(b.start));
+
+  const maintenanceRowEnds = [];
+  maintenanceItems.forEach((item) => {
+    let row = maintenanceRowEnds.findIndex((endIso) => endIso < item.start);
+    if (row === -1) row = maintenanceRowEnds.length;
+    maintenanceRowEnds[row] = item.end;
+    item.row = row;
   });
+  const maintenanceTotalRows = maintenanceRowEnds.length;
 
   const unscheduled = jobs.filter((j) => !j.dueDate);
   $("#unscheduled-tray").innerHTML = unscheduled.length
@@ -938,16 +953,9 @@ function renderBoard() {
     const headerHtml = days
       .map((d) => {
         const iso = toISODate(d);
-        const dueHere = maintenanceByDate[iso] || [];
-        const worstStatus = dueHere.some((m) => m.status === "overdue") ? "overdue" : dueHere.length ? "due-soon" : "";
-        const titles = dueHere.map((m) => `${m.equipment.name}: ${m.task.name}`).join(", ");
-        const marker = dueHere.length
-          ? `<a href="equipment.html" class="cal-maintenance-marker ${worstStatus}" title="${escapeHtml(titles)}">&#128295; ${dueHere.length}</a>`
-          : "";
         return `<div class="cal-day-label ${iso === todayIso ? "today" : ""}">
           ${d.toLocaleDateString(undefined, { weekday: "short" })}
           <span class="cal-date-num">${d.getDate()}</span>
-          ${marker}
         </div>`;
       })
       .join("");
@@ -1017,19 +1025,38 @@ function renderBoard() {
       })
       .join("");
 
+    // Maintenance bars render like job bars (full calendar row, clamped to
+    // this block, row-packed independently), stacked below the job rows.
+    const maintenanceBars = maintenanceItems
+      .filter((m) => m.end >= weekStartIso && m.start <= weekEndIso)
+      .map((m) => {
+        const clampedStart = m.start < weekStartIso ? weekStartIso : m.start;
+        const clampedEnd = m.end > weekEndIso ? weekEndIso : m.end;
+        const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
+        const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+        const title = `${m.equipment.name} — ${m.task.name} — ${m.status === "overdue" ? `overdue since ${m.nextDueIso}` : `due ${m.nextDueIso}`}`;
+        return `<a href="equipment.html" class="cal-bar cal-bar-maintenance ${m.status}"
+          style="grid-column:${startCol} / ${endCol}; grid-row:${totalRows + m.row + 1};" title="${escapeHtml(title)}">
+          <span class="cal-bar-status">${m.status === "overdue" ? "Overdue" : "Due soon"}</span>
+          <span>&#128295; ${escapeHtml(m.equipment.name)} — ${escapeHtml(m.task.name)}</span>
+        </a>`;
+      })
+      .join("");
+
     const weekLabel = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    const gridRows = totalRows + maintenanceTotalRows;
 
     weekBlocksHtml.push(`
       <div class="cal-week-block">
         ${viewWeeks > 1 ? `<div class="cal-week-label">${escapeHtml(weekLabel)}</div>` : ""}
         <div class="cal-header">${headerHtml}</div>
-        <div class="cal-grid" style="grid-template-rows: repeat(${totalRows}, 34px);">${colBackgrounds + bars + ghostBars + workshopOverlays}</div>
+        <div class="cal-grid" style="grid-template-rows: repeat(${gridRows}, 34px);">${colBackgrounds + bars + ghostBars + workshopOverlays + maintenanceBars}</div>
       </div>`);
   }
 
   $("#cal-weeks").innerHTML = weekBlocksHtml.join("");
 
-  $all(".cal-bar").forEach((bar) => bar.addEventListener("click", () => openJobDetail(bar.dataset.id)));
+  $all(".cal-bar[data-id]").forEach((bar) => bar.addEventListener("click", () => openJobDetail(bar.dataset.id)));
   $all(".unscheduled-list .job-card").forEach((card) =>
     card.addEventListener("click", () => openJobDetail(card.dataset.id))
   );
