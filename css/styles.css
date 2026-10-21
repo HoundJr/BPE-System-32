@@ -226,6 +226,20 @@ body {
 .cal-day-label .cal-date-num { display: block; font-size: 0.95rem; font-weight: 600; color: var(--text); }
 .cal-day-label.today .cal-date-num { color: var(--accent); }
 
+.cal-maintenance-marker {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.cal-maintenance-marker.due-soon { color: #b8860b; border-color: #b8860b; }
+.cal-maintenance-marker.overdue { color: var(--danger); border-color: var(--danger); background: #fdecea; }
+
 .cal-grid {
   position: relative;
   display: grid;

@@ -860,6 +860,15 @@ function renderBoard() {
 
   renderCashflowSummary(overallStartIso, overallEndIso);
 
+  // Maintenance tasks due on a given calendar day -- grouped for the small
+  // per-day marker in each week block's header (not a full bar/row like
+  // workshop hours, just enough to not forget about it while scanning dates).
+  const maintenanceByDate = {};
+  maintenanceOutstanding().forEach((m) => {
+    if (!m.nextDueIso) return;
+    (maintenanceByDate[m.nextDueIso] = maintenanceByDate[m.nextDueIso] || []).push(m);
+  });
+
   const unscheduled = jobs.filter((j) => !j.dueDate);
   $("#unscheduled-tray").innerHTML = unscheduled.length
     ? `<h4>Unscheduled (${unscheduled.length})</h4><div class="unscheduled-list">${unscheduled.map(jobCardHtml).join("")}</div>`
@@ -929,9 +938,16 @@ function renderBoard() {
     const headerHtml = days
       .map((d) => {
         const iso = toISODate(d);
+        const dueHere = maintenanceByDate[iso] || [];
+        const worstStatus = dueHere.some((m) => m.status === "overdue") ? "overdue" : dueHere.length ? "due-soon" : "";
+        const titles = dueHere.map((m) => `${m.equipment.name}: ${m.task.name}`).join(", ");
+        const marker = dueHere.length
+          ? `<a href="equipment.html" class="cal-maintenance-marker ${worstStatus}" title="${escapeHtml(titles)}">&#128295; ${dueHere.length}</a>`
+          : "";
         return `<div class="cal-day-label ${iso === todayIso ? "today" : ""}">
           ${d.toLocaleDateString(undefined, { weekday: "short" })}
           <span class="cal-date-num">${d.getDate()}</span>
+          ${marker}
         </div>`;
       })
       .join("");
