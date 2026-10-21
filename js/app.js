@@ -284,6 +284,8 @@ let expandedStages = null; // local UI state (not persisted): which accordion se
 let unsubJobs = null;
 let unsubCustomers = null;
 let unsubJobDetail = null;
+let unsubEquipment = null;
+let equipment = []; // read-only mirror of the equipment.html-managed collection
 
 // ---------- Auth ----------
 
@@ -314,6 +316,7 @@ onAuthStateChanged(auth, (user) => {
     if (unsubJobs) unsubJobs();
     if (unsubCustomers) unsubCustomers();
     if (unsubJobDetail) unsubJobDetail();
+    if (unsubEquipment) unsubEquipment();
   }
 });
 
@@ -467,6 +470,17 @@ function startListeners() {
     },
     showError
   );
+
+  // Read-only: managed on equipment.html, surfaced here for visibility only.
+  unsubEquipment = onSnapshot(
+    collection(db, "equipment"),
+    (snap) => {
+      equipment = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderMaintenanceSummary();
+      renderTodayPanel();
+    },
+    showError
+  );
 }
 
 function renderCustomers() {
@@ -531,6 +545,58 @@ function startOfWeek(d) {
   const mondayOffset = (date.getDay() + 6) % 7; // Monday = 0 ... Sunday = 6
   date.setDate(date.getDate() - mondayOffset);
   return date;
+}
+
+// ---------- Equipment maintenance (read-only; managed on equipment.html) ----------
+// Mirrors the due-status logic in js/equipment.js -- kept duplicated rather
+// than shared so each page stays a self-contained file.
+
+function addInterval(isoDate, value, unit) {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const n = Number(value) || 0;
+  if (unit === "days") date.setDate(date.getDate() + n);
+  else if (unit === "weeks") date.setDate(date.getDate() + n * 7);
+  else date.setMonth(date.getMonth() + n); // months (default)
+  return date;
+}
+
+function maintenanceDueStatus(task) {
+  if (!task.lastDone) return "never";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysUntil = Math.round((addInterval(task.lastDone, task.intervalValue, task.intervalUnit) - today) / 86400000);
+  if (daysUntil < 0) return "overdue";
+  if (daysUntil <= 7) return "due-soon";
+  return "ok";
+}
+
+function maintenanceOutstanding() {
+  const out = [];
+  equipment.forEach((eq) => {
+    (eq.tasks || []).forEach((t) => {
+      const status = maintenanceDueStatus(t);
+      if (status === "overdue" || status === "due-soon" || status === "never") {
+        out.push({ equipment: eq, task: t, status });
+      }
+    });
+  });
+  return out;
+}
+
+function renderMaintenanceSummary() {
+  const outstanding = maintenanceOutstanding();
+  const overdue = outstanding.filter((o) => o.status === "overdue").length;
+  const dueSoon = outstanding.length - overdue;
+  const el = $("#maintenance-summary");
+  if (!outstanding.length) {
+    el.innerHTML = "";
+    return;
+  }
+  const parts = [];
+  if (overdue) parts.push(`<a href="equipment.html" class="overdue">&#128295; ${overdue} maintenance task${overdue === 1 ? "" : "s"} overdue</a>`);
+  if (dueSoon) parts.push(`<a href="equipment.html" class="due-soon">&#128295; ${dueSoon} due soon</a>`);
+  el.innerHTML = parts.join(" ");
 }
 
 function parseISODate(iso) {
@@ -713,6 +779,8 @@ function computeOutstandingTasks() {
   return results;
 }
 
+const MAINTENANCE_STATUS_LABEL = { overdue: "overdue", "due-soon": "due soon", never: "never recorded" };
+
 function renderTodayPanel() {
   $("#today-date").textContent = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -720,9 +788,25 @@ function renderTodayPanel() {
     day: "numeric",
   });
 
+  const maintenance = maintenanceOutstanding();
+  const maintenanceHtml = maintenance.length
+    ? `<h4 class="today-section-label">Maintenance</h4>` +
+      maintenance
+        .map(
+          ({ equipment: eq, task, status }) => `<a href="equipment.html" class="today-job">
+            <div class="today-job-header">&#128295; ${escapeHtml(eq.name)}</div>
+            <div class="today-job-stage">${MAINTENANCE_STATUS_LABEL[status]}</div>
+            <ul class="today-task-list"><li class="today-task-internal">${escapeHtml(task.name)}</li></ul>
+          </a>`
+        )
+        .join("")
+    : "";
+
   const tasks = computeOutstandingTasks();
-  $("#today-list").innerHTML = tasks.length
-    ? tasks
+  const jobsHeading = maintenance.length && tasks.length ? `<h4 class="today-section-label">Jobs</h4>` : "";
+  const jobsHtml = tasks.length
+    ? jobsHeading +
+      tasks
         .map(({ job, stageLabel, lines }) => {
           const custName = customersById[job.customerId]?.name || "?";
           const itemsHtml = lines
@@ -735,9 +819,13 @@ function renderTodayPanel() {
           </div>`;
         })
         .join("")
-    : `<p class="stage-hint">Nothing outstanding — everything's either done or fully paid.</p>`;
+    : "";
 
-  $all(".today-job").forEach((card) => card.addEventListener("click", () => openJobDetail(card.dataset.id)));
+  $("#today-list").innerHTML =
+    maintenanceHtml + jobsHtml ||
+    `<p class="stage-hint">Nothing outstanding — everything's either done or fully paid.</p>`;
+
+  $all(".today-job[data-id]").forEach((card) => card.addEventListener("click", () => openJobDetail(card.dataset.id)));
 }
 
 function renderBoard() {

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Equipment Maintenance</title>
+<link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/equipment.css" />
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="view-login" class="view">
+  <form id="login-form" class="login-box">
+    <h1>Equipment Maintenance</h1>
+    <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
+    <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
+    <button type="submit">Log in</button>
+    <p id="login-error" class="error hidden"></p>
+  </form>
+</section>
+
+<!-- APP SHELL -->
+<div id="app-shell" class="hidden">
+  <div id="error-banner" class="error-banner hidden no-print"></div>
+  <nav class="topnav no-print">
+    <div class="nav-left">
+      <a href="index.html" class="nav-btn">&larr; Job Board</a>
+      <span class="nav-btn active" style="cursor:default;">Equipment Maintenance</span>
+    </div>
+    <div class="nav-right">
+      <button id="btn-logout" class="nav-btn">Log out</button>
+    </div>
+  </nav>
+
+  <main id="app-main">
+    <h2>Equipment</h2>
+
+    <form id="equipment-form" class="inline-form">
+      <input type="text" id="eq-name" placeholder="Equipment name (e.g. Colchester lathe)" required />
+      <input type="text" id="eq-type" placeholder="Type (optional)" />
+      <button type="submit">Add equipment</button>
+    </form>
+
+    <div id="equipment-list" class="equipment-list"></div>
+  </main>
+</div>
+
+<script type="module" src="js/equipment.js"></script>
+</body>
+</html>

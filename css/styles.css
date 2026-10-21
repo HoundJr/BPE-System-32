@@ -92,7 +92,22 @@ body {
   padding: 0.9rem;
 }
 .today-panel h3 { margin: 0 0 0.75rem; font-size: 0.95rem; }
-.today-job { border-bottom: 1px solid var(--border); padding: 0.5rem 0; cursor: pointer; }
+.today-section-label {
+  margin: 0.9rem 0 0.3rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.today-section-label:first-child { margin-top: 0; }
+.today-job {
+  display: block;
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+}
 .today-job:last-child { border-bottom: none; }
 .today-job-header { font-weight: 600; font-size: 0.85rem; }
 .today-job-stage { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
@@ -143,6 +158,18 @@ body {
   letter-spacing: 0.03em;
   color: var(--muted);
 }
+
+.maintenance-summary { margin-bottom: 0.9rem; }
+.maintenance-summary a {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  text-decoration: none;
+}
+.maintenance-summary a.overdue { background: #fdecea; color: var(--danger); border: 1px solid var(--danger); }
+.maintenance-summary a.due-soon { background: var(--panel); color: #b8860b; border: 1px solid #b8860b; }
 
 .job-card {
   background: var(--bg);

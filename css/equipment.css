@@ -1,0 +1,42 @@
+.equipment-list { display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; }
+
+.equipment-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+.equipment-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.equipment-card-header h3 { margin: 0; }
+.equipment-card-header .btn-danger {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.due-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.due-badge.due-never { color: var(--muted); border-color: var(--border); }
+.due-badge.due-ok { color: #3fa25c; border-color: #3fa25c; }
+.due-badge.due-due-soon { color: #b8860b; border-color: #b8860b; }
+.due-badge.due-overdue { color: var(--danger); border-color: var(--danger); background: #fdecea; }
+
+.data-table .task-done { color: var(--accent); margin-right: 0.75rem; }
+
