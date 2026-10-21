@@ -577,11 +577,21 @@ function maintenanceDueStatus(task) {
 }
 
 function maintenanceOutstanding() {
+  return maintenanceSchedule().filter((m) => m.status === "overdue" || m.status === "due-soon" || m.status === "never");
+}
+
+// Every task that has a computable next-due date (i.e. has been done at
+// least once) -- including ones not due for a while yet. Used for the
+// calendar, which shows the whole schedule, not just what's urgent.
+// "Never recorded" tasks have no date to anchor to and are left out here.
+function maintenanceSchedule() {
   const out = [];
   equipment.forEach((eq) => {
     (eq.tasks || []).forEach((t) => {
       const { status, nextDueIso } = maintenanceDueStatus(t);
-      if (status === "overdue" || status === "due-soon" || status === "never") {
+      if (status === "never") {
+        out.push({ equipment: eq, task: t, status, nextDueIso: "" });
+      } else {
         out.push({ equipment: eq, task: t, status, nextDueIso });
       }
     });
@@ -861,12 +871,14 @@ function renderBoard() {
 
   renderCashflowSummary(overallStartIso, overallEndIso);
 
-  // Maintenance tasks rendered as their own calendar bars, below the job
-  // rows -- never-recorded tasks have no due date to anchor to, so they
-  // stay in the Today panel/summary only. Overdue tasks span from when
-  // they were due up to today (so the bar visibly grows the more overdue
-  // it gets); due-soon tasks are a single-day bar on their due date.
-  const maintenanceItems = maintenanceOutstanding()
+  // All scheduled maintenance tasks rendered as their own calendar bars,
+  // below the job rows (not just overdue/due-soon -- that filtered view
+  // stays on the Today panel/summary line). Never-recorded tasks have no
+  // due date to anchor to, so they're left out here regardless. Overdue
+  // tasks span from when they were due up to today (so the bar visibly
+  // grows the more overdue it gets); everything else is a single-day bar
+  // on its due date.
+  const maintenanceItems = maintenanceSchedule()
     .filter((m) => m.nextDueIso)
     .map((m) => ({
       ...m,
@@ -1035,10 +1047,11 @@ function renderBoard() {
         const clampedEnd = m.end > weekEndIso ? weekEndIso : m.end;
         const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
         const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+        const statusLabel = { overdue: "Overdue", "due-soon": "Due soon", ok: "Scheduled" }[m.status];
         const title = `${m.equipment.name} — ${m.task.name} — ${m.status === "overdue" ? `overdue since ${m.nextDueIso}` : `due ${m.nextDueIso}`}`;
         return `<a href="equipment.html" class="cal-bar cal-bar-maintenance ${m.status}"
           style="grid-column:${startCol} / ${endCol}; grid-row:${totalRows + m.row + 1};" title="${escapeHtml(title)}">
-          <span class="cal-bar-status">${m.status === "overdue" ? "Overdue" : "Due soon"}</span>
+          <span class="cal-bar-status">${statusLabel}</span>
           <span>&#128295; ${escapeHtml(m.equipment.name)} — ${escapeHtml(m.task.name)}</span>
         </a>`;
       })
