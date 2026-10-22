@@ -265,6 +265,9 @@ body {
 .cal-bar.cal-bar-maintenance.overdue { background: var(--danger); }
 .cal-bar.cal-bar-maintenance.due-soon { background: #b8860b; }
 .cal-bar.cal-bar-maintenance.ok { background: #3fa25c; }
+.cal-bar.cal-bar-task.overdue { background: var(--danger); }
+.cal-bar.cal-bar-task.due-soon { background: #b8860b; }
+.cal-bar.cal-bar-task.ok { background: #7c6ff0; }
 
 .cal-bar-workshop {
   align-self: end;

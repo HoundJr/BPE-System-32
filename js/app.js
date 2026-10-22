@@ -286,6 +286,8 @@ let unsubCustomers = null;
 let unsubJobDetail = null;
 let unsubEquipment = null;
 let equipment = []; // read-only mirror of the equipment.html-managed collection
+let unsubMiscTasks = null;
+let miscTasks = []; // read-only mirror of the tasks.html-managed collection
 
 // ---------- Auth ----------
 
@@ -317,6 +319,7 @@ onAuthStateChanged(auth, (user) => {
     if (unsubCustomers) unsubCustomers();
     if (unsubJobDetail) unsubJobDetail();
     if (unsubEquipment) unsubEquipment();
+    if (unsubMiscTasks) unsubMiscTasks();
   }
 });
 
@@ -478,6 +481,18 @@ function startListeners() {
       equipment = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderBoard();
       renderMaintenanceSummary();
+      renderTodayPanel();
+    },
+    showError
+  );
+
+  // Read-only: managed on tasks.html, surfaced here for visibility only.
+  unsubMiscTasks = onSnapshot(
+    collection(db, "tasks"),
+    (snap) => {
+      miscTasks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderBoard();
+      renderTaskSummary();
       renderTodayPanel();
     },
     showError
@@ -675,6 +690,89 @@ function renderMaintenanceSummary() {
   el.innerHTML = parts.join(" ");
 }
 
+// ---------- Misc tasks (read-only; managed on tasks.html) ----------
+// Every task always has a nextDue (set directly when created on
+// tasks.html, no fallback needed) -- simpler than maintenance tasks,
+// which can predate that field. Non-recurring tasks project as a single
+// occurrence; recurring ones project forward the same way maintenance does.
+
+function taskDueStatus(task) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysUntil = Math.round((parseISODate(task.nextDue) - today) / 86400000);
+  if (daysUntil < 0) return "overdue";
+  if (daysUntil <= 7) return "due-soon";
+  return "ok";
+}
+
+function taskOutstanding() {
+  return miscTasks
+    .filter((t) => t.active !== false && t.nextDue)
+    .map((t) => ({ task: t, status: taskDueStatus(t), nextDueIso: t.nextDue }))
+    .filter((t) => t.status === "overdue" || t.status === "due-soon")
+    .sort((a, b) => a.nextDueIso.localeCompare(b.nextDueIso));
+}
+
+function renderTaskSummary() {
+  const outstanding = taskOutstanding();
+  const overdueItems = outstanding.filter((o) => o.status === "overdue");
+  const dueSoonItems = outstanding.filter((o) => o.status === "due-soon");
+  const el = $("#task-summary");
+  if (!outstanding.length) {
+    el.innerHTML = "";
+    return;
+  }
+  const parts = [];
+  if (overdueItems.length) {
+    const soonest = overdueItems[0].nextDueIso;
+    parts.push(
+      `<a href="tasks.html" class="overdue">&#128203; ${overdueItems.length} task${overdueItems.length === 1 ? "" : "s"} overdue${soonest ? ` (since ${escapeHtml(soonest)})` : ""}</a>`
+    );
+  }
+  if (dueSoonItems.length) {
+    const soonest = dueSoonItems[0].nextDueIso;
+    parts.push(
+      `<a href="tasks.html" class="due-soon">&#128203; ${dueSoonItems.length} due soon${soonest ? ` (next: ${escapeHtml(soonest)})` : ""}</a>`
+    );
+  }
+  el.innerHTML = parts.join(" ");
+}
+
+function projectTaskOccurrences(rangeStartIso, rangeEndIso) {
+  const out = [];
+  miscTasks.forEach((task) => {
+    if (task.active === false || !task.nextDue) return;
+
+    if (!task.recurring) {
+      const status = taskDueStatus(task);
+      const start = task.nextDue;
+      const end = status === "overdue" && task.nextDue < todayIsoNow() ? todayIsoNow() : task.nextDue;
+      if (end >= rangeStartIso && start <= rangeEndIso) {
+        out.push({ task, status, nextDueIso: task.nextDue, start, end });
+      }
+      return;
+    }
+
+    let occurrence = task.nextDue;
+    let index = 0;
+    let guard = 0;
+    while (occurrence <= rangeEndIso && guard < 60) {
+      guard += 1;
+      const isFirst = index === 0;
+      const status = isFirst ? taskDueStatus(task) : "ok";
+      const start = occurrence;
+      const end = isFirst && status === "overdue" && occurrence < todayIsoNow() ? todayIsoNow() : occurrence;
+      if (end >= rangeStartIso) {
+        out.push({ task, status, nextDueIso: occurrence, start, end });
+      }
+      occurrence = toISODate(addInterval(occurrence, task.intervalValue, task.intervalUnit));
+      index += 1;
+    }
+  });
+  out.sort((a, b) => a.start.localeCompare(b.start));
+  return out;
+}
+
 function parseISODate(iso) {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d);
@@ -865,8 +963,13 @@ function renderTodayPanel() {
   });
 
   const maintenance = maintenanceOutstanding();
+  const outstandingTasks = taskOutstanding();
+  const jobTasks = computeOutstandingTasks();
+  const sectionsPresent = [maintenance.length, outstandingTasks.length, jobTasks.length].filter((n) => n > 0).length;
+  const heading = (label) => (sectionsPresent > 1 ? `<h4 class="today-section-label">${label}</h4>` : "");
+
   const maintenanceHtml = maintenance.length
-    ? `<h4 class="today-section-label">Maintenance</h4>` +
+    ? heading("Maintenance") +
       maintenance
         .map(
           ({ equipment: eq, task, status, nextDueIso }) => `<a href="equipment.html" class="today-job">
@@ -878,11 +981,22 @@ function renderTodayPanel() {
         .join("")
     : "";
 
-  const tasks = computeOutstandingTasks();
-  const jobsHeading = maintenance.length && tasks.length ? `<h4 class="today-section-label">Jobs</h4>` : "";
-  const jobsHtml = tasks.length
-    ? jobsHeading +
-      tasks
+  const tasksHtml = outstandingTasks.length
+    ? heading("Tasks") +
+      outstandingTasks
+        .map(
+          ({ task, status, nextDueIso }) => `<a href="tasks.html" class="today-job">
+            <div class="today-job-header">&#128203; ${escapeHtml(task.name)}</div>
+            <div class="today-job-stage">${status === "overdue" ? "overdue" : "due soon"}${nextDueIso ? ` · due ${escapeHtml(nextDueIso)}` : ""}</div>
+            ${task.notes ? `<ul class="today-task-list"><li class="today-task-internal">${escapeHtml(task.notes)}</li></ul>` : ""}
+          </a>`
+        )
+        .join("")
+    : "";
+
+  const jobsHtml = jobTasks.length
+    ? heading("Jobs") +
+      jobTasks
         .map(({ job, stageLabel, lines }) => {
           const custName = customersById[job.customerId]?.name || "?";
           const itemsHtml = lines
@@ -898,7 +1012,7 @@ function renderTodayPanel() {
     : "";
 
   $("#today-list").innerHTML =
-    maintenanceHtml + jobsHtml ||
+    maintenanceHtml + tasksHtml + jobsHtml ||
     `<p class="stage-hint">Nothing outstanding — everything's either done or fully paid.</p>`;
 
   $all(".today-job[data-id]").forEach((card) => card.addEventListener("click", () => openJobDetail(card.dataset.id)));
@@ -938,6 +1052,18 @@ function renderBoard() {
     item.row = row;
   });
   const maintenanceTotalRows = maintenanceRowEnds.length;
+
+  // Misc tasks (BAS, website work, etc.) get their own band below
+  // maintenance, same row-packing/projection treatment.
+  const taskItems = projectTaskOccurrences(overallStartIso, overallEndIso);
+  const taskRowEnds = [];
+  taskItems.forEach((item) => {
+    let row = taskRowEnds.findIndex((endIso) => endIso < item.start);
+    if (row === -1) row = taskRowEnds.length;
+    taskRowEnds[row] = item.end;
+    item.row = row;
+  });
+  const taskTotalRows = taskRowEnds.length;
 
   const unscheduled = jobs.filter((j) => !j.dueDate);
   $("#unscheduled-tray").innerHTML = unscheduled.length
@@ -1099,14 +1225,32 @@ function renderBoard() {
       })
       .join("");
 
+    // Misc task bars render the same way, stacked below maintenance.
+    const taskBars = taskItems
+      .filter((t) => t.end >= weekStartIso && t.start <= weekEndIso)
+      .map((t) => {
+        const clampedStart = t.start < weekStartIso ? weekStartIso : t.start;
+        const clampedEnd = t.end > weekEndIso ? weekEndIso : t.end;
+        const startCol = days.findIndex((d) => toISODate(d) === clampedStart) + 1;
+        const endCol = days.findIndex((d) => toISODate(d) === clampedEnd) + 2;
+        const statusLabel = { overdue: "Overdue", "due-soon": "Due soon", ok: "Scheduled" }[t.status];
+        const title = `${t.task.name} — ${t.status === "overdue" ? `overdue since ${t.nextDueIso}` : `due ${t.nextDueIso}`}`;
+        return `<a href="tasks.html" class="cal-bar cal-bar-task ${t.status}"
+          style="grid-column:${startCol} / ${endCol}; grid-row:${totalRows + maintenanceTotalRows + t.row + 1};" title="${escapeHtml(title)}">
+          <span class="cal-bar-status">${statusLabel}</span>
+          <span>&#128203; ${escapeHtml(t.task.name)}</span>
+        </a>`;
+      })
+      .join("");
+
     const weekLabel = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
-    const gridRows = totalRows + maintenanceTotalRows;
+    const gridRows = totalRows + maintenanceTotalRows + taskTotalRows;
 
     weekBlocksHtml.push(`
       <div class="cal-week-block">
         ${viewWeeks > 1 ? `<div class="cal-week-label">${escapeHtml(weekLabel)}</div>` : ""}
         <div class="cal-header">${headerHtml}</div>
-        <div class="cal-grid" style="grid-template-rows: repeat(${gridRows}, 34px);">${colBackgrounds + bars + ghostBars + workshopOverlays + maintenanceBars}</div>
+        <div class="cal-grid" style="grid-template-rows: repeat(${gridRows}, 34px);">${colBackgrounds + bars + ghostBars + workshopOverlays + maintenanceBars + taskBars}</div>
       </div>`);
   }
 

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tasks</title>
+<link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/tasks.css" />
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="view-login" class="view">
+  <form id="login-form" class="login-box">
+    <h1>Tasks</h1>
+    <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
+    <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
+    <button type="submit">Log in</button>
+    <p id="login-error" class="error hidden"></p>
+  </form>
+</section>
+
+<!-- APP SHELL -->
+<div id="app-shell" class="hidden">
+  <div id="error-banner" class="error-banner hidden no-print"></div>
+  <nav class="topnav no-print">
+    <div class="nav-left">
+      <a href="index.html" class="nav-btn">&larr; Job Board</a>
+      <a href="equipment.html" class="nav-btn">Equipment</a>
+      <a href="recipe-book.html" class="nav-btn">Recipe Book</a>
+      <span class="nav-btn active" style="cursor:default;">Tasks</span>
+    </div>
+    <div class="nav-right">
+      <button id="btn-logout" class="nav-btn">Log out</button>
+    </div>
+  </nav>
+
+  <main id="app-main">
+    <h2>Tasks</h2>
+    <p class="field-hint">Misc admin/business tasks (BAS, website work, etc.) -- shown on the job board calendar alongside jobs and maintenance so you can schedule work around them.</p>
+
+    <form id="task-form" class="inline-form">
+      <input type="text" id="task-name" placeholder="Task (e.g. Lodge BAS statement)" required />
+      <input type="text" id="task-notes" placeholder="Notes (optional)" />
+      <label class="task-due-label">Due <input type="date" id="task-next-due" required /></label>
+      <label class="task-recurring-label"><input type="checkbox" id="task-recurring" /> Recurring</label>
+      <input type="number" min="1" id="task-interval-value" placeholder="Every" style="width:5em" value="3" />
+      <select id="task-interval-unit">
+        <option value="days">days</option>
+        <option value="weeks">weeks</option>
+        <option value="months" selected>months</option>
+      </select>
+      <button type="submit">Add task</button>
+    </form>
+
+    <div id="task-list" class="task-list"></div>
+
+    <h3 class="task-completed-heading hidden" id="task-completed-heading">Completed</h3>
+    <div id="task-completed-list" class="task-list"></div>
+  </main>
+</div>
+
+<script type="module" src="js/tasks.js"></script>
+</body>
+</html>
