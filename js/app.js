@@ -612,6 +612,44 @@ function maintenanceSchedule() {
   return out;
 }
 
+// Projects a recurring task forward past its real next-due date, generating
+// one occurrence per interval cycle up to rangeEndIso -- so a monthly task
+// due this month also shows the occurrence that would fall 2 months out,
+// letting a job scheduled that far ahead be checked against it. Only the
+// first (real) occurrence carries true overdue/due-soon urgency; later
+// projected cycles are just "scheduled" (ok), since they aren't due yet.
+function projectMaintenanceOccurrences(rangeStartIso, rangeEndIso) {
+  const out = [];
+  equipment.forEach((eq) => {
+    (eq.tasks || []).forEach((task) => {
+      const firstDue = maintenanceEffectiveNextDue(task);
+      if (!firstDue) return;
+
+      let occurrence = firstDue;
+      let index = 0;
+      let guard = 0;
+      while (occurrence <= rangeEndIso && guard < 60) {
+        guard += 1;
+        const isFirst = index === 0;
+        const status = isFirst ? maintenanceDueStatus(task).status : "ok";
+        const start = occurrence;
+        const end = isFirst && status === "overdue" && occurrence < todayIsoNow() ? todayIsoNow() : occurrence;
+        if (end >= rangeStartIso) {
+          out.push({ equipment: eq, task, status, nextDueIso: occurrence, start, end });
+        }
+        occurrence = toISODate(addInterval(occurrence, task.intervalValue, task.intervalUnit));
+        index += 1;
+      }
+    });
+  });
+  out.sort((a, b) => a.start.localeCompare(b.start));
+  return out;
+}
+
+function todayIsoNow() {
+  return toISODate(new Date());
+}
+
 function renderMaintenanceSummary() {
   const outstanding = maintenanceOutstanding(); // already sorted soonest-first
   const overdueItems = outstanding.filter((o) => o.status === "overdue");
@@ -882,22 +920,15 @@ function renderBoard() {
 
   renderCashflowSummary(overallStartIso, overallEndIso);
 
-  // All scheduled maintenance tasks rendered as their own calendar bars,
-  // below the job rows (not just overdue/due-soon -- that filtered view
-  // stays on the Today panel/summary line). Never-recorded tasks have no
-  // due date to anchor to, so they're left out here regardless. Overdue
-  // tasks span from when they were due up to today (so the bar visibly
-  // grows the more overdue it gets); everything else is a single-day bar
-  // on its due date.
-  const maintenanceItems = maintenanceSchedule()
-    .filter((m) => m.nextDueIso)
-    .map((m) => ({
-      ...m,
-      start: m.nextDueIso,
-      end: m.status === "overdue" && m.nextDueIso < todayIso ? todayIso : m.nextDueIso,
-    }))
-    .filter((m) => m.end >= overallStartIso && m.start <= overallEndIso);
-  maintenanceItems.sort((a, b) => a.start.localeCompare(b.start));
+  // All scheduled maintenance occurrences rendered as their own calendar
+  // bars, below the job rows -- projected forward past just the next
+  // occurrence so a recurring task's later cycles show up too (e.g. a
+  // monthly task's 2-months-out occurrence, so scheduling a job that far
+  // ahead can be checked against it). Never-recorded tasks have no due
+  // date to anchor to, so they're left out regardless. Only the real next
+  // occurrence can be overdue (spanning from when it was due up to today,
+  // so the bar visibly grows); later projected cycles are a single-day bar.
+  const maintenanceItems = projectMaintenanceOccurrences(overallStartIso, overallEndIso);
 
   const maintenanceRowEnds = [];
   maintenanceItems.forEach((item) => {
