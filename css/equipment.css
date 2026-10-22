@@ -36,7 +36,7 @@
 .due-badge.due-never { color: var(--muted); border-color: var(--border); }
 .due-badge.due-ok { color: #3fa25c; border-color: #3fa25c; }
 .due-badge.due-due-soon { color: #b8860b; border-color: #b8860b; }
-.due-badge.due-overdue { color: var(--danger); border-color: var(--danger); background: #fdecea; }
+.due-badge.due-overdue { color: var(--danger); border-color: var(--danger); background: #3a2220; }
 
 .data-table .task-done { color: var(--accent); margin-right: 0.75rem; }
 

@@ -1,12 +1,13 @@
 :root {
-  --bg: #f4f5f7;
-  --panel: #ffffff;
-  --border: #d8dbe0;
-  --text: #1f2328;
-  --muted: #626a72;
-  --accent: #2f6fed;
+  color-scheme: dark;
+  --bg: #15171a;
+  --panel: #1f2328;
+  --border: #383d44;
+  --text: #e8eaed;
+  --muted: #9aa2ab;
+  --accent: #5b8def;
   --accent-text: #ffffff;
-  --danger: #c0392b;
+  --danger: #e4594f;
   --col-gap: 0.75rem;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -45,7 +46,7 @@ body {
 .error { color: var(--danger); font-size: 0.85rem; }
 
 .error-banner {
-  background: #fdecea;
+  background: #3a2220;
   color: var(--danger);
   border-bottom: 1px solid var(--danger);
   padding: 0.6rem 1rem;
@@ -168,7 +169,7 @@ body {
   border-radius: 6px;
   text-decoration: none;
 }
-.maintenance-summary a.overdue { background: #fdecea; color: var(--danger); border: 1px solid var(--danger); }
+.maintenance-summary a.overdue { background: #3a2220; color: var(--danger); border: 1px solid var(--danger); }
 .maintenance-summary a.due-soon { background: var(--panel); color: #b8860b; border: 1px solid #b8860b; }
 
 .job-card {
@@ -222,7 +223,7 @@ body {
   border-left: 1px solid var(--border);
 }
 .cal-day-label:first-child { border-left: none; }
-.cal-day-label.today { color: var(--accent); font-weight: 700; background: rgba(47, 111, 237, 0.06); }
+.cal-day-label.today { color: var(--accent); font-weight: 700; background: rgba(91, 141, 239, 0.12); }
 .cal-day-label .cal-date-num { display: block; font-size: 0.95rem; font-weight: 600; color: var(--text); }
 .cal-day-label.today .cal-date-num { color: var(--accent); }
 
@@ -234,7 +235,7 @@ body {
 }
 .cal-col-bg { border-left: 1px solid var(--border); }
 .cal-col-bg:first-child { border-left: none; }
-.cal-col-bg.weekend { background: rgba(0, 0, 0, 0.025); }
+.cal-col-bg.weekend { background: rgba(255, 255, 255, 0.03); }
 
 .cal-bar {
   position: relative;
@@ -274,7 +275,7 @@ body {
   height: 6px;
   margin-bottom: 2px;
   border-radius: 2px;
-  background: #111827;
+  background: var(--text);
   position: relative;
   z-index: 2;
   pointer-events: none;
@@ -292,7 +293,7 @@ body {
   bottom: 1px;
   height: 3px;
   border-radius: 1px;
-  background: #111827;
+  background: var(--text);
 }
 .legend-swatch-conflict::after { background: #dc2626; }
 
@@ -483,7 +484,7 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 0.4rem; }
   cursor: pointer;
 }
 .lost-banner {
-  background: #fdecea;
+  background: #3a2220;
   border: 1px solid var(--danger);
   color: var(--danger);
   border-radius: 6px;

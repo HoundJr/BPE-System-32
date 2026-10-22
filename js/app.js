@@ -538,7 +538,7 @@ $("#customer-form").addEventListener("submit", async (e) => {
 // ---------- Board / calendar ----------
 
 let weekOffset = 0;
-let viewWeeks = 1; // 1, 2, or 4 -- how many weeks the board shows at once
+let viewWeeks = 4; // 1, 2, or 4 -- how many weeks the board shows at once (defaults to 4)
 
 $("#cal-prev").addEventListener("click", () => { weekOffset -= viewWeeks; renderBoard(); });
 $("#cal-next").addEventListener("click", () => { weekOffset += viewWeeks; renderBoard(); });
