@@ -562,15 +562,26 @@ function addInterval(isoDate, value, unit) {
   return date;
 }
 
+// Mirrors js/equipment.js's effectiveNextDue() -- the due date is a plain
+// stored field (set directly when the task is created, advanced when
+// marked done there) so every task has one, including tasks that have
+// never been done yet. Falls back to the old lastDone+interval computation
+// for any task saved before this field existed.
+function maintenanceEffectiveNextDue(task) {
+  if (task.nextDue) return task.nextDue;
+  if (task.lastDone) return toISODate(addInterval(task.lastDone, task.intervalValue, task.intervalUnit));
+  return "";
+}
+
 // Mirrors js/equipment.js's dueStatus() -- returns both the status and the
-// computed next-due date so the board can show dates, not just labels.
+// due date so the board can show dates, not just labels.
 function maintenanceDueStatus(task) {
-  if (!task.lastDone) return { status: "never", nextDueIso: "" };
+  const nextDueIso = maintenanceEffectiveNextDue(task);
+  if (!nextDueIso) return { status: "never", nextDueIso: "" };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const nextDue = addInterval(task.lastDone, task.intervalValue, task.intervalUnit);
-  const daysUntil = Math.round((nextDue - today) / 86400000);
-  const nextDueIso = toISODate(nextDue);
+  const [y, m, d] = nextDueIso.split("-").map(Number);
+  const daysUntil = Math.round((new Date(y, m - 1, d) - today) / 86400000);
   if (daysUntil < 0) return { status: "overdue", nextDueIso };
   if (daysUntil <= 7) return { status: "due-soon", nextDueIso };
   return { status: "ok", nextDueIso };

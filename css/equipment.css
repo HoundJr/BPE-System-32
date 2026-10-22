@@ -40,3 +40,11 @@
 
 .data-table .task-done { color: var(--accent); margin-right: 0.75rem; }
 
+.task-next-due-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+

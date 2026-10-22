@@ -47,20 +47,33 @@ function addInterval(isoDate, value, unit) {
   return date;
 }
 
+// The due date is a plain stored field (set directly when the task is
+// created, advanced when marked done) rather than always recomputed from
+// lastDone -- so every task has a date to show, including ones that have
+// never been done yet. lastDone is kept only as a record of when it was
+// last actually done, not used to derive the due date.
+// Falls back to the old lastDone+interval computation for any task saved
+// before this field existed.
+function effectiveNextDue(task) {
+  if (task.nextDue) return task.nextDue;
+  if (task.lastDone) return toISODate(addInterval(task.lastDone, task.intervalValue, task.intervalUnit));
+  return "";
+}
+
 // Returns { status: "never" | "overdue" | "due-soon" | "ok", nextDueIso }
 function dueStatus(task) {
-  if (!task.lastDone) return { status: "never", nextDueIso: "" };
+  const nextDueIso = effectiveNextDue(task);
+  if (!nextDueIso) return { status: "never", nextDueIso: "" };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const nextDue = addInterval(task.lastDone, task.intervalValue, task.intervalUnit);
-  const daysUntil = Math.round((nextDue - today) / (24 * 60 * 60 * 1000));
-  const nextDueIso = toISODate(nextDue);
+  const [y, m, d] = nextDueIso.split("-").map(Number);
+  const daysUntil = Math.round((new Date(y, m - 1, d) - today) / (24 * 60 * 60 * 1000));
   if (daysUntil < 0) return { status: "overdue", nextDueIso };
   if (daysUntil <= 7) return { status: "due-soon", nextDueIso };
   return { status: "ok", nextDueIso };
 }
 
-const STATUS_LABELS = { never: "Never recorded", overdue: "Overdue", "due-soon": "Due soon", ok: "OK" };
+const STATUS_LABELS = { never: "No due date set", overdue: "Overdue", "due-soon": "Due soon", ok: "OK" };
 
 // ---------- Auth ----------
 
@@ -147,8 +160,9 @@ function renderEquipmentList() {
       const name = form.querySelector(".task-name").value.trim();
       const intervalValue = Number(form.querySelector(".task-interval-value").value) || 1;
       const intervalUnit = form.querySelector(".task-interval-unit").value;
-      if (!name) return;
-      const tasks = [...(eq.tasks || []), { name, intervalValue, intervalUnit, lastDone: "", notes: "" }];
+      const nextDue = form.querySelector(".task-next-due").value;
+      if (!name || !nextDue) return;
+      const tasks = [...(eq.tasks || []), { name, intervalValue, intervalUnit, nextDue, lastDone: "", notes: "" }];
       try {
         await updateDoc(doc(db, "equipment", eqId), { tasks });
         form.reset();
@@ -165,7 +179,12 @@ function renderEquipmentList() {
       const eq = equipment.find((x) => x.id === eqId);
       if (!eq) return;
       const tasks = [...(eq.tasks || [])];
-      tasks[i] = { ...tasks[i], lastDone: toISODate(new Date()) };
+      const task = tasks[i];
+      // Advance from the previous due date (not from today) so the
+      // schedule stays on a consistent cadence rather than drifting
+      // earlier/later depending on exactly when it got marked done.
+      const base = effectiveNextDue(task) || toISODate(new Date());
+      tasks[i] = { ...task, lastDone: toISODate(new Date()), nextDue: toISODate(addInterval(base, task.intervalValue, task.intervalUnit)) };
       try {
         await updateDoc(doc(db, "equipment", eqId), { tasks });
       } catch (err) {
@@ -229,6 +248,7 @@ function equipmentCardHtml(eq) {
         <option value="weeks">weeks</option>
         <option value="months" selected>months</option>
       </select>
+      <label class="task-next-due-label">First due <input type="date" class="task-next-due" required /></label>
       <button type="submit">Add task</button>
     </form>
   </div>`;
