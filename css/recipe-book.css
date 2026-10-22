@@ -1,0 +1,41 @@
+#app-main > .field-hint { margin: -0.25rem 0 1rem; }
+
+.sop-list { display: flex; flex-direction: column; gap: 1.25rem; margin-top: 1rem; }
+
+.sop-category h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3rem;
+}
+
+.sop-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.sop-entry:last-child { border-bottom: none; }
+
+.sop-title {
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.sop-title:hover { text-decoration: underline; }
+
+.sop-description { color: var(--muted); font-size: 0.88rem; flex: 1 1 auto; }
+
+.sop-entry .sop-delete {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 0.8rem;
+}

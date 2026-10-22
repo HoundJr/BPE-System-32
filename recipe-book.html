@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Recipe Book</title>
+<link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/recipe-book.css" />
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="view-login" class="view">
+  <form id="login-form" class="login-box">
+    <h1>Recipe Book</h1>
+    <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
+    <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
+    <button type="submit">Log in</button>
+    <p id="login-error" class="error hidden"></p>
+  </form>
+</section>
+
+<!-- APP SHELL -->
+<div id="app-shell" class="hidden">
+  <div id="error-banner" class="error-banner hidden no-print"></div>
+  <nav class="topnav no-print">
+    <div class="nav-left">
+      <a href="index.html" class="nav-btn">&larr; Job Board</a>
+      <a href="equipment.html" class="nav-btn">Equipment</a>
+      <span class="nav-btn active" style="cursor:default;">Recipe Book</span>
+    </div>
+    <div class="nav-right">
+      <button id="btn-logout" class="nav-btn">Log out</button>
+    </div>
+  </nav>
+
+  <main id="app-main">
+    <h2>Recipe Book</h2>
+    <p class="field-hint">How we do things. Each entry links out to the full procedure (a Google Doc) -- this page is just the index.</p>
+
+    <form id="sop-form" class="inline-form">
+      <input type="text" id="sop-title" placeholder="Title (e.g. Quoting an RFQ)" required />
+      <input type="text" id="sop-category" placeholder="Category (e.g. Quoting)" />
+      <input type="text" id="sop-description" placeholder="Short description" />
+      <input type="url" id="sop-url" placeholder="Google Doc link" required />
+      <button type="submit">Add entry</button>
+    </form>
+
+    <div id="sop-list" class="sop-list"></div>
+  </main>
+</div>
+
+<script type="module" src="js/recipe-book.js"></script>
+</body>
+</html>
